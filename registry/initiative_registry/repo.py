@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from securesystemslib.signer import Signer
+from securesystemslib.signer import Signer, SSlibKey
 from tuf.api.exceptions import UnsignedMetadataError
 from tuf.api.metadata import (
     DelegatedRole,
@@ -133,10 +133,17 @@ def check_not_expired(metadata: Metadata, what: str, now: datetime) -> None:
 
 
 def top_level_targets(
-    publishers: dict[str, Publisher], *, version: int, now: datetime
+    publishers: dict[str, Publisher],
+    *,
+    version: int,
+    now: datetime,
+    package_key: SSlibKey | None = None,
 ) -> Targets:
     """The top-level targets role: one delegation per publisher, bound to its key
-    and limited to its own prefix, plus each publisher's record as a target."""
+    and limited to its own prefix, plus each publisher's record as a target.
+
+    With ``package_key``, also the package role's delegation
+    (:data:`layout.PACKAGE_ROLE`), limited to the paths only a package signs."""
     keys = {}
     roles = {}
     records = {}
@@ -155,6 +162,15 @@ def top_level_targets(
         )
         records[publisher.target_path] = TargetFile.from_data(
             publisher.target_path, publisher.data, ["sha256"]
+        )
+    if package_key is not None:
+        keys[package_key.keyid] = package_key
+        roles[layout.PACKAGE_ROLE] = DelegatedRole(
+            name=layout.PACKAGE_ROLE,
+            keyids=[package_key.keyid],
+            threshold=1,
+            terminating=True,
+            paths=layout.package_delegation_paths(),
         )
     return Targets(
         version=version,

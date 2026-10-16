@@ -10,7 +10,7 @@ from tuf.api.metadata import TargetFile
 from initiative_registry import RegistryError, layout
 from initiative_registry.build import refresh_timestamp
 from initiative_registry.repo import utc_now
-from initiative_registry.sources import sha256
+from initiative_registry.sources import load_listings, load_publishers, sha256
 from initiative_registry.verify import open_updater, verify
 
 from .conftest import World, resign_role
@@ -107,14 +107,6 @@ def test_overlay_cannot_reuse_a_uid(world: World) -> None:
         world.build(sources=[world.sources, overlay])
 
 
-def _priced(document: dict) -> None:
-    document["price"] = {"model": "per_use"}
-
-
-def _sectored(document: dict) -> None:
-    document["registration"]["reference_sectors"] = ["example-sector"]
-
-
 def _runnable(document: dict) -> None:
     document["registration"]["runtime"] = {
         "name": "tracker",
@@ -123,31 +115,35 @@ def _runnable(document: dict) -> None:
     }
 
 
-CHANGES = [_priced, _sectored, _runnable]
-CHANGE_IDS = ["priced", "sectored", "runnable"]
-
-
-@pytest.mark.parametrize("change", CHANGES, ids=CHANGE_IDS)
-def test_public_target_refuses_priced_sectored_and_runnable(
-    world: World, change
-) -> None:
-    world.edit_listing(PLUGIN, change)
-    with pytest.raises(
-        RegistryError, match="public target takes no priced, sectored or runnable"
-    ):
+def test_the_public_index_refuses_a_runtime(world: World) -> None:
+    world.edit_listing(PLUGIN, _runnable)
+    with pytest.raises(RegistryError, match="public index takes no runnable listing"):
         world.build(target="public")
     assert not (world.root / "out").exists()
 
 
-@pytest.mark.parametrize("change", CHANGES, ids=CHANGE_IDS)
-def test_hosted_target_accepts_priced_sectored_and_runnable(
-    world: World, change
-) -> None:
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda d: d.update(price={"model": "per_use"}),
+        lambda d: d.update(price=None),
+        lambda d: d["registration"].update(reference_sectors=["billing"]),
+        lambda d: d["registration"].update(reference_sectors=[]),
+    ],
+    ids=["price", "null-price", "reference-sectors", "no-reference-sectors"],
+)
+def test_a_listing_has_no_term_for_money(world: World, change) -> None:
+    """Billable is a package's to say, under the package role. A listing that
+    tries to say anything about it, even that it is free, is malformed."""
     world.edit_listing(PLUGIN, change)
-    result = world.build(target="hosted")
-    verify(result.out, world.trusted_root, target="hosted")
-    with pytest.raises(RegistryError, match="public target excludes"):
-        verify(result.out, world.trusted_root, target="public")
+    with pytest.raises(RegistryError, match=r"listing\.schema\.json"):
+        world.build()
+
+
+def _load(world: World):
+    """The sources as a package loads them: validated, but never built into the
+    public index."""
+    return load_listings([world.sources], load_publishers([world.publishers]))
 
 
 def test_prefix_must_match_publisher(world: World) -> None:
@@ -518,16 +514,15 @@ def test_a_container_may_carry_a_runtime_that_raises_no_privilege(
     runtime = {**RUNTIME, **change}
     world.edit_listing(PLUGIN, lambda d: d["registration"].update(runtime=runtime))
     if accepted:
-        result = world.build(target="hosted")
-        plugin = next(listing for listing in result.listings if listing.uid == PLUGIN)
+        plugin = next(listing for listing in _load(world) if listing.uid == PLUGIN)
         signed = plugin.targets[f"publishers/acme/{PLUGIN}/listing.json"]
         assert json.loads(signed.data)["registration"]["runtime"] == runtime
     else:
         with pytest.raises(RegistryError, match=r"listing\.schema\.json"):
-            world.build(target="hosted")
+            _load(world)
 
 
-DECLARATIVE = {"kind": "declarative", "scope_ceiling": [], "reference_sectors": []}
+DECLARATIVE = {"kind": "declarative", "scope_ceiling": []}
 
 
 def test_a_declarative_plugin_registers_no_image(world: World) -> None:

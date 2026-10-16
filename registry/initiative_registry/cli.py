@@ -52,9 +52,20 @@ def _init_root(args: argparse.Namespace) -> None:
         snapshot_key=load_public_key(args.snapshot_pub),
         timestamp_key=load_public_key(args.timestamp_pub),
         publisher_dirs=args.publishers or [layout.DEFAULT_PUBLISHERS_DIR],
+        package_key=_package_key(args.package_key),
     )
     for path in result.written:
         print(f"wrote {path}")
+
+
+def _package_key(path: Path | None):
+    """The package role's public key: the path given, or the committed one if
+    the owner has made it. ``None`` when there is none."""
+    if path is not None:
+        return load_public_key(path)
+    if layout.DEFAULT_PACKAGE_KEY.is_file():
+        return load_public_key(layout.DEFAULT_PACKAGE_KEY)
+    return None
 
 
 def _optional_signer(path: Path | None):
@@ -74,6 +85,7 @@ def _sign_offline(args: argparse.Namespace) -> None:
         snapshot_key=_optional_public(args.snapshot_pub),
         timestamp_key=_optional_public(args.timestamp_pub),
         publisher_dirs=args.publishers,
+        package_key=_package_key(args.package_key),
         renew_root=args.renew_root,
     )
     for path in result.written:
@@ -116,6 +128,7 @@ def _build(args: argparse.Namespace) -> None:
         keys=keys,
         metadata_dir=args.metadata,
         publisher_dirs=args.publishers or [layout.DEFAULT_PUBLISHERS_DIR],
+        package_key=_package_key(args.package_key),
     )
     print(
         f"built the {args.target} repository in {result.out}: "
@@ -225,6 +238,10 @@ def parser() -> argparse.ArgumentParser:
 
     metadata_help = "the committed signed metadata (default: registry/metadata)"
     publishers_help = "a directory of publisher records (default: registry/publishers)"
+    package_key_help = (
+        "the package role's .pub.json (default: registry/roles/package.pub.json, "
+        "when it exists)"
+    )
 
     init = commands.add_parser("init-root", help="create root v1 and the first targets")
     init.add_argument(
@@ -245,6 +262,7 @@ def parser() -> argparse.ArgumentParser:
         help="the timestamp key's .pub.json",
     )
     init.add_argument("--publishers", type=_path, action="append", help=publishers_help)
+    init.add_argument("--package-key", type=_path, help=package_key_help)
     init.set_defaults(run=_init_root)
 
     offline = commands.add_parser(
@@ -278,6 +296,7 @@ def parser() -> argparse.ArgumentParser:
     offline.add_argument(
         "--publishers", type=_path, action="append", help=publishers_help
     )
+    offline.add_argument("--package-key", type=_path, help=package_key_help)
     offline.set_defaults(run=_sign_offline)
 
     online_keys = (
@@ -292,8 +311,7 @@ def parser() -> argparse.ArgumentParser:
         "--target",
         required=True,
         choices=BUILD_TARGETS,
-        help="public excludes priced and sectored listings, and refuses "
-        "input that has one",
+        help="the index to build; public, the only one, refuses runnable listings",
     )
     run.add_argument(
         "--sources",
@@ -312,6 +330,7 @@ def parser() -> argparse.ArgumentParser:
         help=metadata_help,
     )
     run.add_argument("--publishers", type=_path, action="append", help=publishers_help)
+    run.add_argument("--package-key", type=_path, help=package_key_help)
     run.add_argument("--keys", type=_path, help="a directory of <name>.pem online keys")
     run.add_argument("--snapshot-key", type=_path)
     run.add_argument("--timestamp-key", type=_path)

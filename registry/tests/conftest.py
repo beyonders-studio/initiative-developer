@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from dataclasses import dataclass
@@ -9,8 +10,8 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
-from securesystemslib.signer import CryptoSigner
-from tuf.api.metadata import Metadata, MetaFile, Snapshot, Targets
+from securesystemslib.signer import CryptoSigner, SSlibKey
+from tuf.api.metadata import Metadata, MetaFile, Snapshot, TargetFile, Targets
 
 from initiative_registry import layout
 from initiative_registry.build import BuildResult, build, sign_timestamp
@@ -48,6 +49,7 @@ class World:
         *,
         target: str = "public",
         sources: list[Path] | None = None,
+        package_key: SSlibKey | None = None,
         now: datetime | None = None,
     ) -> BuildResult:
         return build(
@@ -57,8 +59,13 @@ class World:
             keys=self.signer,
             metadata_dir=self.metadata,
             publisher_dirs=[self.publishers],
+            package_key=package_key,
             now=now,
         )
+
+    @property
+    def package_key(self) -> SSlibKey:
+        return self.signer(layout.PACKAGE_ROLE).public_key
 
     @property
     def trusted_root(self) -> Path:
@@ -79,7 +86,7 @@ def write_publisher(directory: Path, prefix: str, keys: Path) -> Path:
 @pytest.fixture
 def world(tmp_path: Path) -> World:
     keys = tmp_path / "keys"
-    for role in (*layout.TOP_LEVEL_ROLES, *PUBLISHERS):
+    for role in (*layout.TOP_LEVEL_ROLES, *PUBLISHERS, layout.PACKAGE_ROLE):
         generate(role, keys)
     publishers = tmp_path / "publishers"
     publishers.mkdir()
@@ -115,8 +122,50 @@ def resign_role(world: World, repo: Path, prefix: str, change) -> None:
     role.signatures.clear()
     role.sign(world.signer(prefix))
     (metadata_dir / f"{role.signed.version}.{prefix}.json").write_bytes(to_bytes(role))
+    _publish_role(world, metadata_dir, snapshot, prefix, role.signed.version, now)
 
-    snapshot.signed.meta[f"{prefix}.json"] = MetaFile(version=role.signed.version)
+
+def add_package_role(world: World, repo: Path, files: dict[str, bytes]) -> None:
+    """Sign a package role over ``files`` into a built repository, as a package
+    service would, then re-sign the snapshot and the timestamp."""
+    metadata_dir = repo / layout.METADATA_SUBDIR
+    snapshot_path = sorted(metadata_dir.glob("*.snapshot.json"))[-1]
+    snapshot = Metadata[Snapshot].from_file(str(snapshot_path))
+    now = utc_now()
+    for path, data in files.items():
+        served = (
+            repo
+            / layout.TARGETS_SUBDIR
+            / layout.served_target_path(path, hashlib.sha256(data).hexdigest())
+        )
+        served.parent.mkdir(parents=True, exist_ok=True)
+        served.write_bytes(data)
+    role = Metadata(
+        Targets(
+            version=1,
+            expires=now + layout.EXPIRY[layout.PACKAGE_ROLE],
+            targets={
+                path: TargetFile.from_data(path, data, ["sha256"])
+                for path, data in files.items()
+            },
+        )
+    )
+    role.sign(world.signer(layout.PACKAGE_ROLE))
+    (metadata_dir / f"1.{layout.PACKAGE_ROLE}.json").write_bytes(to_bytes(role))
+    _publish_role(world, metadata_dir, snapshot, layout.PACKAGE_ROLE, 1, now)
+
+
+def _publish_role(
+    world: World,
+    metadata_dir: Path,
+    snapshot: Metadata[Snapshot],
+    name: str,
+    version: int,
+    now: datetime,
+) -> None:
+    """Name a delegated role's new version in the snapshot, then re-sign the
+    snapshot and the timestamp over it."""
+    snapshot.signed.meta[f"{name}.json"] = MetaFile(version=version)
     snapshot.signed.version = online_version(snapshot.signed.version, now)
     snapshot.signatures.clear()
     snapshot.sign(world.signer("snapshot"))

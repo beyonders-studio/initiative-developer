@@ -26,6 +26,9 @@ from .build import PUBLIC
 from .errors import RegistryError
 from .sources import definition_matches, sha256
 
+#: A path no package signs: it loads the package role without naming a target.
+_PACKAGE_PROBE = "entitlements/.probe.json"
+
 #: A uid no listing can have: it probes a delegation without naming a target.
 _PROBE_UID = "_"
 
@@ -85,6 +88,8 @@ class VerifyResult:
     publishers: dict[str, int] = field(default_factory=dict)
     listings: list[str] = field(default_factory=list)
     files: int = 0
+    #: The package role's version, when the repository carries one.
+    package_version: int | None = None
 
 
 def _download(
@@ -128,14 +133,8 @@ def _check_entry(
         raise RegistryError(
             f"{path} is signed by {prefix!r} but names another publisher"
         )
-    if target == PUBLIC and (
-        entry.get("price") is not None
-        or (entry.get("registration") or {}).get("reference_sectors")
-        or (entry.get("registration") or {}).get("runtime")
-    ):
-        raise RegistryError(
-            f"{path} is priced, sectored or runnable, which the public target excludes"
-        )
+    if target == PUBLIC and (entry.get("registration") or {}).get("runtime"):
+        raise RegistryError(f"{path} is runnable, which the public index excludes")
 
     base = f"publishers/{prefix}/{uid}/"
     named = [entry["avatar"], *entry.get("images", [])]
@@ -173,6 +172,37 @@ def _check_manifest(path: str, data: bytes, entry: dict) -> None:
         )
 
 
+def _check_package_role(
+    updater: Updater, work: Path, role: DelegatedRole, *, target: str | None
+) -> int | None:
+    """The package role's version, or ``None`` if the repository carries none.
+
+    A delegation alone is expected everywhere: the public index shares
+    ``targets.json`` with every package. A signed package role is not. The
+    public index must never carry one, and anywhere else it may sign only the
+    package paths.
+    """
+    if role.paths != layout.package_delegation_paths():
+        raise RegistryError("the delegation to the package role covers other paths")
+    snapshot = Metadata.from_file(str(work / "metadata" / "snapshot.json"))
+    if f"{layout.PACKAGE_ROLE}.json" not in snapshot.signed.meta:
+        return None
+    if target == "public":
+        raise RegistryError(
+            "the public index carries a package role: billable terms and "
+            "registration keys belong only in a package"
+        )
+    # Loading the role goes through its delegation from targets.
+    updater.get_targetinfo(_PACKAGE_PROBE)
+    delegated = _persisted_role(work, layout.PACKAGE_ROLE)
+    for path in sorted(delegated.signed.targets):
+        if not role.is_delegated_path(path):
+            raise RegistryError(
+                f"the package role signs {path}, which is outside its delegation"
+            )
+    return delegated.signed.version
+
+
 def verify(
     repo: str | Path, trusted_root: Path, *, target: str | None = None
 ) -> VerifyResult:
@@ -199,6 +229,11 @@ def verify(
             )
             if layout.RESERVED_PREFIX in roles:
                 raise RegistryError(f"targets delegates {layout.RESERVED_PREFIX!r}")
+            package_role = roles.pop(layout.PACKAGE_ROLE, None)
+            if package_role is not None:
+                result.package_version = _check_package_role(
+                    updater, work, package_role, target=target
+                )
             for prefix, role in roles.items():
                 if role.paths != layout.delegation_paths(prefix):
                     raise RegistryError(

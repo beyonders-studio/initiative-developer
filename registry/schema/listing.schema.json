@@ -137,18 +137,6 @@
         },
         "registration": {
           "$ref": "#/$defs/registration"
-        },
-        "price": {
-          "description": "Null for a free listing. The public target refuses any listing whose price is not null.",
-          "oneOf": [
-            {
-              "type": "null"
-            },
-            {
-              "type": "object",
-              "minProperties": 1
-            }
-          ]
         }
       },
       "allOf": [
@@ -287,7 +275,7 @@
       "unevaluatedProperties": false
     },
     "registration": {
-      "description": "For a plug-in (and allowed for an automation): what kind it is, the most it may ever be granted, and the reference sectors it may learn. A container names the image each deployment runs, and each deployment gives its location and the keys its copy signs with. A declarative plug-in names no image: Initiative runs it from its manifest. A container may also carry a runtime, which lets a deployment run it on its own.",
+      "description": "For a plug-in (and allowed for an automation): what kind it is and the most it may ever be granted. A container names the image each deployment runs, and each deployment gives its location and the keys its copy signs with. A declarative plug-in names no image: Initiative runs it from its manifest. A container may also carry a runtime, which lets a deployment run it on its own.",
       "type": "object",
       "required": [
         "kind",
@@ -313,15 +301,6 @@
           "items": {
             "type": "string",
             "pattern": "^([a-z][a-z_]*:[a-z][a-z_]*|plugins:[a-z0-9_-]+\\.[a-z0-9._-]+)$"
-          }
-        },
-        "reference_sectors": {
-          "description": "Reference sectors the plug-in may be granted. The public target refuses any listing that names one.",
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9_-]{0,63}$"
           }
         },
         "compose": {
