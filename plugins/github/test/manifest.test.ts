@@ -215,7 +215,7 @@ describe("manifest", () => {
   it("is listed in the registry, with a registration by declaration", () => {
     const listing = read<Record<string, any>>(join(source, "listing.json"));
     expect(listing).toMatchObject({ uid: LISTING_UID, public_id: "beyonders-studio.github", publisher: "beyonders-studio" });
-    expect(listing.registration).toEqual({ kind: "declarative", scope_ceiling: [], reference_sectors: [] });
+    expect(listing.registration).toEqual({ kind: "declarative", scope_ceiling: [] });
     // Between releases the plug-in runs ahead of what the listing publishes, never behind it.
     expect(packageVersion === listing.versions[0].version || later(packageVersion, listing.versions[0].version)).toBe(true);
   });
