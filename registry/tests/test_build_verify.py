@@ -457,7 +457,7 @@ RUNTIME = {
     "secrets": [
         {
             "id": "session-private-key",
-            "kind": "rsa_private_key_pem",
+            "kind": "ed25519_private_key_pem",
             "env": "SESSION_PRIVATE_KEY_PEM",
         }
     ],
@@ -484,6 +484,7 @@ RUNTIME = {
         ({"facts": {"APP_ORIGIN": "anything_else"}}, False),
         ({"facts": {"lower": "app_url"}}, False),
         ({"secrets": [{"id": "k", "kind": "ssh_key", "env": "K"}]}, False),
+        ({"secrets": [{"id": "k", "kind": "rsa_private_key_pem", "env": "K"}]}, False),
         ({"database": {**RUNTIME["database"], "provision_sql": "provision.sh"}}, False),
         ({"resources": {"limits": {"memory": "64Gi"}}}, False),
         ({"securityContext": {"privileged": True}}, False),
@@ -500,6 +501,7 @@ RUNTIME = {
         "unknown-fact",
         "lower-env",
         "unknown-secret-kind",
+        "rsa-secret-kind",
         "not-sql",
         "resources",
         "security-context",
