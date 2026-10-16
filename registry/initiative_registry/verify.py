@@ -131,9 +131,10 @@ def _check_entry(
     if target == PUBLIC and (
         entry.get("price") is not None
         or (entry.get("registration") or {}).get("reference_sectors")
+        or (entry.get("registration") or {}).get("runtime")
     ):
         raise RegistryError(
-            f"{path} is priced or sectored, which the public target excludes"
+            f"{path} is priced, sectored or runnable, which the public target excludes"
         )
 
     base = f"publishers/{prefix}/{uid}/"

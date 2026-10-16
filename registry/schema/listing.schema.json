@@ -287,7 +287,7 @@
       "unevaluatedProperties": false
     },
     "registration": {
-      "description": "For a plug-in (and allowed for an automation): what kind it is, the most it may ever be granted, and the reference sectors it may learn. A container names the image each deployment runs, and each deployment gives its location and the keys its copy signs with. A declarative plug-in names no image: Initiative runs it from its manifest.",
+      "description": "For a plug-in (and allowed for an automation): what kind it is, the most it may ever be granted, and the reference sectors it may learn. A container names the image each deployment runs, and each deployment gives its location and the keys its copy signs with. A declarative plug-in names no image: Initiative runs it from its manifest. A container may also carry a runtime, which lets a deployment run it on its own.",
       "type": "object",
       "required": [
         "kind",
@@ -326,6 +326,9 @@
         },
         "compose": {
           "$ref": "#/$defs/compose"
+        },
+        "runtime": {
+          "$ref": "#/$defs/runtime"
         }
       },
       "additionalProperties": false,
@@ -352,6 +355,11 @@
             {
               "required": [
                 "compose"
+              ]
+            },
+            {
+              "required": [
+                "runtime"
               ]
             }
           ]
@@ -381,6 +389,288 @@
         }
       },
       "additionalProperties": false
+    },
+    "runtime": {
+      "description": "For a container a deployment runs for its operator: what the container is and what it needs, so infrastructure can run it without code of its own. Trust comes from here; where it runs, how big it is, and every key and password come from the deployment. Nothing here can raise a privilege: there is no field for resources, security context, service account, volumes, network rules, hostnames, command, or Secret names. The public target refuses any listing that names one.",
+      "type": "object",
+      "required": [
+        "name",
+        "port",
+        "health"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "The plug-in's short name in a deployment: a DNS label, unique in a package. Object names derive from it.",
+          "type": "string",
+          "pattern": "^[a-z]([a-z0-9-]{0,18}[a-z0-9])?$"
+        },
+        "port": {
+          "description": "The port the container serves HTTP on.",
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "health": {
+          "type": "object",
+          "required": [
+            "ready",
+            "live"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "ready": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^/[A-Za-z0-9._~/-]*$",
+              "description": "Answers 2xx when the container should receive traffic."
+            },
+            "live": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^/[A-Za-z0-9._~/-]*$",
+              "description": "Answers 2xx while the process is alive."
+            },
+            "startup_seconds": {
+              "description": "How long it may take to first answer ready, migrations included.",
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 900
+            }
+          }
+        },
+        "stop_grace_seconds": {
+          "description": "How long it needs to drain after SIGTERM.",
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 300
+        },
+        "migrates_on_start": {
+          "description": "It changes its database schema as it starts, so two copies must never start together.",
+          "type": "boolean"
+        },
+        "pages": {
+          "description": "It serves pages Initiative frames, at an origin of its own the deployment gives it.",
+          "type": "boolean"
+        },
+        "public_paths": {
+          "description": "Paths outside callers reach on the deployment's shared plug-in host.",
+          "type": "array",
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^/[A-Za-z0-9._~/-]*$"
+          }
+        },
+        "facts": {
+          "description": "Environment variables the deployment fills with what it knows about itself. app_url: Initiative's public URL. app_origin: its origin. app_api_public / app_api_internal: its API, from outside or from inside the cluster. page_origin: this plug-in's own origin (needs pages). port: the port above.",
+          "type": "object",
+          "maxProperties": 20,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "enum": [
+              "app_url",
+              "app_origin",
+              "app_api_public",
+              "app_api_internal",
+              "page_origin",
+              "port"
+            ]
+          }
+        },
+        "settings": {
+          "description": "Environment variables only the operator can fill, by name. A required one left unset stops the deployment.",
+          "type": "array",
+          "maxItems": 30,
+          "items": {
+            "type": "object",
+            "required": [
+              "env"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "env": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+              },
+              "required": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "signing_key": {
+          "description": "Where the private key its copy signs with goes. The deployment makes the key and registers its public half.",
+          "type": "object",
+          "required": [
+            "env"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "env": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+            }
+          }
+        },
+        "database": {
+          "description": "Its own Postgres, which the deployment runs, backs up and gives one login per role.",
+          "type": "object",
+          "required": [
+            "roles",
+            "provision_sql"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "min_major": {
+              "type": "integer",
+              "minimum": 14,
+              "maximum": 40
+            },
+            "dsn_scheme": {
+              "type": "string",
+              "enum": [
+                "postgresql",
+                "postgresql+asyncpg",
+                "postgresql+psycopg",
+                "postgres"
+              ]
+            },
+            "roles": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 6,
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "login",
+                  "env"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9]{0,15}$"
+                  },
+                  "login": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{0,62}$"
+                  },
+                  "env": {
+                    "type": "string",
+                    "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+                  }
+                }
+              }
+            },
+            "provision_sql": {
+              "description": "A file in the image, run once per change as the database owner with psql, given each role's password as the variable <id>_password. It must be idempotent.",
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^/[A-Za-z0-9._/-]+\\.sql$"
+            }
+          }
+        },
+        "secrets": {
+          "description": "Values the deployment generates once and keeps.",
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "env"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,31}$"
+              },
+              "kind": {
+                "enum": [
+                  "random_alnum_32",
+                  "random_bytes_32",
+                  "hex_32",
+                  "rsa_private_key_pem"
+                ]
+              },
+              "env": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+              }
+            }
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "required": [
+            "path",
+            "token_env"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^/[A-Za-z0-9._~/-]*$"
+            },
+            "token_env": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+            }
+          }
+        },
+        "integrations": {
+          "description": "Shared secrets with Initiative's own services. A deployment honours these for its own publishers only.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "billing": {
+              "type": "object",
+              "required": [
+                "hmac_env",
+                "public_key_env"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "hmac_env": {
+                  "type": "string",
+                  "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+                },
+                "hmac_previous_env": {
+                  "type": "string",
+                  "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+                },
+                "public_key_env": {
+                  "type": "string",
+                  "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+                }
+              }
+            },
+            "bundled_channel": {
+              "type": "object",
+              "required": [
+                "env"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "env": {
+                  "type": "string",
+                  "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

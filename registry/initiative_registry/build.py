@@ -71,8 +71,12 @@ def _write_target(out: Path, blob: Blob) -> None:
 
 
 def refuse_for_target(target: str, listings: list[Listing]) -> None:
-    """The public target excludes priced and sectored listings, and refuses to run
-    over input that contains one; other targets take them."""
+    """The public target excludes priced, sectored and runnable listings, and
+    refuses to run over input that contains one; other targets take them.
+
+    A runtime is how a deployment runs a container on its own, so a listing
+    carrying one reaches a cluster only through a package somebody reviewed
+    and pinned, never through the open index."""
     if target not in BUILD_TARGETS:
         raise RegistryError(
             f"unknown target {target!r}; expected one of {BUILD_TARGETS}"
@@ -86,11 +90,13 @@ def refuse_for_target(target: str, listings: list[Listing]) -> None:
             reasons.append("a price")
         if listing.reference_sectors:
             reasons.append("reference sectors " + ", ".join(listing.reference_sectors))
+        if listing.runnable:
+            reasons.append("a runtime")
         if reasons:
             offenders.append(f"{listing.source} has {' and '.join(reasons)}")
     if offenders:
         raise RegistryError(
-            "the public target takes no priced or sectored listing:\n  "
+            "the public target takes no priced, sectored or runnable listing:\n  "
             + "\n  ".join(offenders)
         )
 

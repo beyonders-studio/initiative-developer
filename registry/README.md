@@ -107,6 +107,34 @@ them:
     is refused. `base_url` is where the service answers on the Compose
     network, such as `http://tracker:8080`: an `http` or `https` URL of at
     most 512 characters.
+  - `runtime` is optional, and a container's only: what a deployment needs to
+    run the container on its own, without code of its own for it. It is the
+    trust half; where the container runs, how big it is, and every key and
+    password stay the deployment's.
+    - `name` (a DNS label, unique in a package), `port`, `health` (`ready`,
+      `live`, `startup_seconds`), `stop_grace_seconds`, and
+      `migrates_on_start` (two copies must never start together).
+    - `pages`: it serves framed pages at an origin of its own.
+      `public_paths`: paths outside callers reach.
+    - `facts`: environment variables the deployment fills from a closed list
+      (`app_url`, `app_origin`, `app_api_public`, `app_api_internal`,
+      `page_origin`, `port`). `settings`: variables only the operator fills,
+      by name.
+    - `signing_key`: where the key its copy signs with goes.
+    - `database`: its own Postgres, with one login per role and an idempotent
+      SQL file in the image that creates them (`provision_sql`, run with each
+      role's password as `<id>_password`).
+    - `secrets`: values generated once and kept (`random_alnum_32`,
+      `random_bytes_32`, `hex_32`, `rsa_private_key_pem`).
+    - `metrics`, and `integrations` with Initiative's own services (billing's
+      HMAC and key, the bundled channel), which a deployment honours for its
+      own publishers only.
+
+    There is deliberately no field for resources, a security context, a
+    service account, volumes, network rules, hostnames, a command, or the name
+    of any Secret: none of those may come from a listing. The public target
+    refuses a listing with a `runtime`, so one reaches a cluster only through a
+    package somebody reviewed and pinned.
 - **`price`** is `null` for a free listing.
 
 The published entry, `publishers/<prefix>/<uid>/listing.json`, is the same
@@ -131,10 +159,11 @@ Each version's definition and example move into its own target,
 `--sources` trees.
 
 - **`public`** is built from this directory's `sources/` and published here. It
-  excludes priced and sectored entries: if its input contains a listing with a
-  non-null `price` or any `reference_sectors`, it refuses to run.
+  excludes priced, sectored and runnable entries: if its input contains a
+  listing with a non-null `price`, any `reference_sectors` or a `runtime`, it
+  refuses to run.
 - **`hosted`** takes the same sources, and may take additional source trees
-  after them. It accepts priced and sectored entries, and is signed under the
+  after them. It accepts priced, sectored and runnable entries, and is signed under the
   same root and targets metadata.
 
 Across all the trees given, each uid and `public_id` may appear only once.

@@ -115,18 +115,34 @@ def _sectored(document: dict) -> None:
     document["registration"]["reference_sectors"] = ["example-sector"]
 
 
-@pytest.mark.parametrize("change", [_priced, _sectored], ids=["priced", "sectored"])
-def test_public_target_refuses_priced_and_sectored(world: World, change) -> None:
+def _runnable(document: dict) -> None:
+    document["registration"]["runtime"] = {
+        "name": "tracker",
+        "port": 8080,
+        "health": {"ready": "/readyz", "live": "/healthz"},
+    }
+
+
+CHANGES = [_priced, _sectored, _runnable]
+CHANGE_IDS = ["priced", "sectored", "runnable"]
+
+
+@pytest.mark.parametrize("change", CHANGES, ids=CHANGE_IDS)
+def test_public_target_refuses_priced_sectored_and_runnable(
+    world: World, change
+) -> None:
     world.edit_listing(PLUGIN, change)
     with pytest.raises(
-        RegistryError, match="public target takes no priced or sectored"
+        RegistryError, match="public target takes no priced, sectored or runnable"
     ):
         world.build(target="public")
     assert not (world.root / "out").exists()
 
 
-@pytest.mark.parametrize("change", [_priced, _sectored], ids=["priced", "sectored"])
-def test_hosted_target_accepts_priced_and_sectored(world: World, change) -> None:
+@pytest.mark.parametrize("change", CHANGES, ids=CHANGE_IDS)
+def test_hosted_target_accepts_priced_sectored_and_runnable(
+    world: World, change
+) -> None:
     world.edit_listing(PLUGIN, change)
     result = world.build(target="hosted")
     verify(result.out, world.trusted_root, target="hosted")
@@ -417,6 +433,100 @@ def test_a_registration_may_carry_a_compose_snippet(
             world.build()
 
 
+# What auto declares: every part of a runtime, filled in.
+RUNTIME = {
+    "name": "auto",
+    "port": 8200,
+    "health": {
+        "ready": "/api/v1/readyz",
+        "live": "/api/v1/healthz",
+        "startup_seconds": 180,
+    },
+    "stop_grace_seconds": 60,
+    "migrates_on_start": True,
+    "pages": True,
+    "public_paths": ["/hooks"],
+    "facts": {"APP_ORIGIN": "page_origin", "INITIATIVE_API_URL": "app_api_internal"},
+    "settings": [{"env": "DEMO_ROLE", "required": True}],
+    "signing_key": {"env": "AUTO_DELEGATION_PRIVATE_KEY_PEM"},
+    "database": {
+        "min_major": 17,
+        "dsn_scheme": "postgresql+asyncpg",
+        "roles": [
+            {"id": "owner", "login": "auto_owner", "env": "OWNER_DATABASE_URL"},
+            {"id": "app", "login": "auto_app", "env": "APP_DATABASE_URL"},
+        ],
+        "provision_sql": "/app/scripts/provision-roles.sql",
+    },
+    "secrets": [
+        {
+            "id": "session-private-key",
+            "kind": "rsa_private_key_pem",
+            "env": "SESSION_PRIVATE_KEY_PEM",
+        }
+    ],
+    "metrics": {"path": "/api/v1/metrics", "token_env": "METRICS_TOKEN"},
+    "integrations": {
+        "billing": {
+            "hmac_env": "INITIATIVE_BILLING_SHARED_SECRET",
+            "hmac_previous_env": "INITIATIVE_BILLING_SHARED_SECRET_PREVIOUS",
+            "public_key_env": "BILLING_PUBLIC_KEY_PEM",
+        },
+        "bundled_channel": {"env": "INITIATIVE_BUNDLED_SECRET"},
+    },
+}
+
+
+@pytest.mark.parametrize(
+    ("change", "accepted"),
+    [
+        ({}, True),
+        ({"name": "Auto"}, False),
+        ({"name": "a" * 21}, False),
+        ({"port": 80}, False),
+        ({"health": {"ready": "readyz", "live": "/healthz"}}, False),
+        ({"facts": {"APP_ORIGIN": "anything_else"}}, False),
+        ({"facts": {"lower": "app_url"}}, False),
+        ({"secrets": [{"id": "k", "kind": "ssh_key", "env": "K"}]}, False),
+        ({"database": {**RUNTIME["database"], "provision_sql": "provision.sh"}}, False),
+        ({"resources": {"limits": {"memory": "64Gi"}}}, False),
+        ({"securityContext": {"privileged": True}}, False),
+        ({"serviceAccountName": "default"}, False),
+        ({"command": ["sh"]}, False),
+        ({"secret_names": ["initiative-secrets"]}, False),
+    ],
+    ids=[
+        "full",
+        "upper-name",
+        "long-name",
+        "privileged-port",
+        "relative-probe",
+        "unknown-fact",
+        "lower-env",
+        "unknown-secret-kind",
+        "not-sql",
+        "resources",
+        "security-context",
+        "service-account",
+        "command",
+        "secret-names",
+    ],
+)
+def test_a_container_may_carry_a_runtime_that_raises_no_privilege(
+    world: World, change: dict, accepted: bool
+) -> None:
+    runtime = {**RUNTIME, **change}
+    world.edit_listing(PLUGIN, lambda d: d["registration"].update(runtime=runtime))
+    if accepted:
+        result = world.build(target="hosted")
+        plugin = next(listing for listing in result.listings if listing.uid == PLUGIN)
+        signed = plugin.targets[f"publishers/acme/{PLUGIN}/listing.json"]
+        assert json.loads(signed.data)["registration"]["runtime"] == runtime
+    else:
+        with pytest.raises(RegistryError, match=r"listing\.schema\.json"):
+            world.build(target="hosted")
+
+
 DECLARATIVE = {"kind": "declarative", "scope_ceiling": [], "reference_sectors": []}
 
 
@@ -439,10 +549,17 @@ def test_a_declarative_plugin_registers_no_image(world: World) -> None:
     [
         ({**DECLARATIVE, "image": f"ghcr.io/acme/t@sha256:{'0' * 64}"}, "schema"),
         ({**DECLARATIVE, "compose": COMPOSE}, "schema"),
+        ({**DECLARATIVE, "runtime": RUNTIME}, "schema"),
         ({"kind": "container", "scope_ceiling": []}, "schema"),
         (DECLARATIVE, "has no service block"),
     ],
-    ids=["declarative-image", "declarative-compose", "no-image", "service-block"],
+    ids=[
+        "declarative-image",
+        "declarative-compose",
+        "declarative-runtime",
+        "no-image",
+        "service-block",
+    ],
 )
 def test_a_registration_fits_its_kind(
     world: World, registration: dict, match: str
