@@ -122,7 +122,7 @@ them:
       SQL file in the image that creates them (`provision_sql`, run with each
       role's password as `<id>_password`).
     - `secrets`: values generated once and kept (`random_alnum_32`,
-      `random_bytes_32`, `hex_32`, `rsa_private_key_pem`).
+      `random_bytes_32`, `hex_32`, `ed25519_private_key_pem`, a PKCS#8 PEM).
     - `metrics`, and `integrations` with Initiative's own services (billing's
       HMAC and key, the bundled channel), which a deployment honours for its
       own publishers only.
