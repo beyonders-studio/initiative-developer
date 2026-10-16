@@ -442,7 +442,11 @@ RUNTIME = {
     "migrates_on_start": True,
     "pages": True,
     "public_paths": ["/hooks"],
-    "facts": {"APP_ORIGIN": "page_origin", "INITIATIVE_API_URL": "app_api_internal"},
+    "facts": {
+        "APP_ORIGIN": "page_origin",
+        "INITIATIVE_API_URL": "app_api_internal",
+        "INITIATIVE_ENTITLEMENT_ISSUER_KEY_PEM": "entitlement_issuer_key",
+    },
     "settings": [{"env": "DEMO_ROLE", "required": True}],
     "signing_key": {"env": "AUTO_DELEGATION_PRIVATE_KEY_PEM"},
     "database": {
@@ -462,14 +466,6 @@ RUNTIME = {
         }
     ],
     "metrics": {"path": "/api/v1/metrics", "token_env": "METRICS_TOKEN"},
-    "integrations": {
-        "billing": {
-            "hmac_env": "INITIATIVE_BILLING_SHARED_SECRET",
-            "hmac_previous_env": "INITIATIVE_BILLING_SHARED_SECRET_PREVIOUS",
-            "public_key_env": "BILLING_PUBLIC_KEY_PEM",
-        },
-        "bundled_channel": {"env": "INITIATIVE_BUNDLED_SECRET"},
-    },
 }
 
 
@@ -483,6 +479,9 @@ RUNTIME = {
         ({"health": {"ready": "readyz", "live": "/healthz"}}, False),
         ({"facts": {"APP_ORIGIN": "anything_else"}}, False),
         ({"facts": {"lower": "app_url"}}, False),
+        ({"facts": {"KEY_PEM": "entitlement_issuer_key"}}, True),
+        ({"integrations": {"billing": {"public_key_env": "P"}}}, False),
+        ({"integrations": {"bundled_channel": {"env": "S"}}}, False),
         ({"secrets": [{"id": "k", "kind": "ssh_key", "env": "K"}]}, False),
         ({"secrets": [{"id": "k", "kind": "rsa_private_key_pem", "env": "K"}]}, False),
         ({"database": {**RUNTIME["database"], "provision_sql": "provision.sh"}}, False),
@@ -500,6 +499,9 @@ RUNTIME = {
         "relative-probe",
         "unknown-fact",
         "lower-env",
+        "entitlement-issuer-key-fact",
+        "billing-integration",
+        "bundled-channel-integration",
         "unknown-secret-kind",
         "rsa-secret-kind",
         "not-sql",
