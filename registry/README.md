@@ -290,6 +290,11 @@ its secret.
 
 ### The package role
 
+This is the registry owner's, done once on the machine holding the offline
+targets key. Nobody deploying Initiative ever runs it: a self-hosted
+deployment reads the public index with the root its image ships, and needs
+nothing from this section.
+
 `targets` delegates one more role beside the publishers: `package`, over
 `entitlements/*` and `grants/*`. Its public key is
 `roles/package.pub.json`. While that file is absent, nothing delegates the
