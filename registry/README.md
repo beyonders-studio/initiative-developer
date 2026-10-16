@@ -42,10 +42,8 @@ pull request review is the listing's review: merging it publishes the listing.
   "registration": {
     "kind": "container",
     "image": "ghcr.io/acme/tracker@sha256:…",
-    "scope_ceiling": ["projects:read", "comments:write"],
-    "reference_sectors": []
-  },
-  "price": null
+    "scope_ceiling": ["projects:read", "comments:write"]
+  }
 }
 ```
 
@@ -98,7 +96,6 @@ them:
   - `scope_ceiling` is the most the plug-in may ever be granted, with
     `plugins:<public_id>` for each plug-in it may call. A manifest may ask for less,
     never more.
-  - `reference_sectors` lists the reference sectors a plug-in may be granted.
   - `compose` is optional, and a container's only: the Docker Compose service
     an operator copies to run the container beside Initiative. `service` is the fragment, as YAML
     text of at most 4096 characters. It may use two placeholders, which
@@ -132,10 +129,13 @@ them:
 
     There is deliberately no field for resources, a security context, a
     service account, volumes, network rules, hostnames, a command, or the name
-    of any Secret: none of those may come from a listing. The public target
+    of any Secret: none of those may come from a listing. The public index
     refuses a listing with a `runtime`, so one reaches a cluster only through a
     package somebody reviewed and pinned.
-- **`price`** is `null` for a free listing.
+
+A listing says nothing about money, and its schema has no term that could.
+Whether a listing is billable is a package's to say, under the `package` role
+(below), which the public index never holds.
 
 The published entry, `publishers/<prefix>/<uid>/listing.json`, is the same
 document with every image path rewritten to the target beside it and every
@@ -153,20 +153,17 @@ Each version's definition and example move into its own target,
 }
 ```
 
-## Targets
+## The public index
 
-`build --target` decides what goes in. Both targets take one or more
-`--sources` trees.
+`build --target public` builds the one index this builder makes, from one or
+more `--sources` trees. It is published here. It refuses a listing with a
+`runtime`. Across all the trees given, each uid and `public_id` may appear
+only once.
 
-- **`public`** is built from this directory's `sources/` and published here. It
-  excludes priced, sectored and runnable entries: if its input contains a
-  listing with a non-null `price`, any `reference_sectors` or a `runtime`, it
-  refuses to run.
-- **`hosted`** takes the same sources, and may take additional source trees
-  after them. It accepts priced, sectored and runnable entries, and is signed under the
-  same root and targets metadata.
-
-Across all the trees given, each uid and `public_id` may appear only once.
+A package (initiative-packages) is built from the public index. It adds our
+own listings, and signs what only a package may carry under the `package`
+role: which listings are billable (`entitlements/`) and a deployment's
+registration keys (`grants/`).
 
 ## The repository as built
 
@@ -203,6 +200,7 @@ themselves are:
 | `root` | the keys of every top-level role | offline | 1 year |
 | `targets` | one delegation per publisher, and each publisher's record | offline | 1 year |
 | `<prefix>` | that publisher's listing targets | the publisher's own; ours is a CI secret | 90 days |
+| `package` | a package's `entitlements/*` and `grants/*` | the package service's, a secret only initiative-packages holds | 90 days |
 | `snapshot` | the versions of `targets` and of every publisher role | CI secret | 7 days |
 | `timestamp` | the snapshot | CI secret | 1 day |
 
@@ -289,6 +287,28 @@ like any other.
 
 To rotate a publisher's key, change its record, re-sign `targets`, then replace
 its secret.
+
+### The package role
+
+`targets` delegates one more role beside the publishers: `package`, over
+`entitlements/*` and `grants/*`. Its public key is
+`roles/package.pub.json`. While that file is absent, nothing delegates the
+role. The private key is held by initiative-packages and nowhere else, so the
+public index, built here without it, never carries a file the role signs.
+`verify --target public` refuses one if it does.
+
+`package` is also refused as a publisher prefix.
+
+```sh
+uv run initiative-registry keygen --role package --out $keys
+mkdir -p roles && cp $keys/package.pub.json roles/package.pub.json
+uv run initiative-registry sign-offline --targets-key $keys/targets.pem
+```
+
+Commit `roles/package.pub.json` with the `targets.json` it writes. Then store
+`package.pem`'s text as initiative-packages' `REGISTRY_PACKAGE_KEY` secret.
+Root is unchanged. Rotating the role's key is the same three steps with the new
+key.
 
 ## Commands
 

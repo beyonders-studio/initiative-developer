@@ -21,7 +21,6 @@
   ],
   "registration": {
     "kind": "declarative",
-    "scope_ceiling": [],
-    "reference_sectors": []
+    "scope_ceiling": []
   }
 }

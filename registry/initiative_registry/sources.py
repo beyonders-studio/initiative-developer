@@ -62,15 +62,6 @@ class Listing:
     targets: dict[str, Blob] = field(default_factory=dict)
 
     @property
-    def priced(self) -> bool:
-        return self.entry.get("price") is not None
-
-    @property
-    def reference_sectors(self) -> list[str]:
-        registration = self.entry.get("registration") or {}
-        return list(registration.get("reference_sectors") or [])
-
-    @property
     def runnable(self) -> bool:
         """It carries a runtime: a deployment would run it on its own."""
         return bool((self.entry.get("registration") or {}).get("runtime"))

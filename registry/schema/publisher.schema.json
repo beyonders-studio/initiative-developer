@@ -27,7 +27,8 @@
           "root",
           "targets",
           "snapshot",
-          "timestamp"
+          "timestamp",
+          "package"
         ]
       }
     },

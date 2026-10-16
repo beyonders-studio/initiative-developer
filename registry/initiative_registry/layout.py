@@ -14,6 +14,9 @@ SCHEMA_DIR = (
 )
 DEFAULT_METADATA_DIR = REGISTRY_DIR / "metadata"
 DEFAULT_PUBLISHERS_DIR = REGISTRY_DIR / "publishers"
+#: The package role's public key, once the owner has made one. Absent, targets
+#: delegates no package role.
+DEFAULT_PACKAGE_KEY = REGISTRY_DIR / "roles" / "package.pub.json"
 
 ROOT = "root"
 TARGETS = "targets"
@@ -21,11 +24,19 @@ SNAPSHOT = "snapshot"
 TIMESTAMP = "timestamp"
 TOP_LEVEL_ROLES = (ROOT, TARGETS, SNAPSHOT, TIMESTAMP)
 
+#: The role a package signs its deployment's terms with: which of its listings
+#: are billable (``entitlements/``) and its registration keys (``grants/``).
+#: ``targets`` delegates it beside the publishers, but only the package service
+#: holds its key, so the public index, built without that key, never carries a
+#: file it signs.
+PACKAGE_ROLE = "package"
+
 #: How long each role's signature is good for.
 EXPIRY = {
     ROOT: timedelta(days=365),
     TARGETS: timedelta(days=365),
     "publisher": timedelta(days=90),
+    PACKAGE_ROLE: timedelta(days=90),
     SNAPSHOT: timedelta(days=7),
     TIMESTAMP: timedelta(days=1),
 }
@@ -57,6 +68,8 @@ def prefix_problem(prefix: str) -> str | None:
         return f"the {RESERVED_PREFIX!r} prefix is reserved and never delegated"
     if prefix in TOP_LEVEL_ROLES:
         return f"{prefix!r} is the name of a top-level role"
+    if prefix == PACKAGE_ROLE:
+        return f"{prefix!r} is the name of the package role"
     return None
 
 
@@ -88,6 +101,12 @@ def delegation_paths(prefix: str) -> list[str]:
         f"publishers/{prefix}/*/*/manifest.json",
         f"publishers/{prefix}/*/assets/*",
     ]
+
+
+def package_delegation_paths() -> list[str]:
+    """The target paths the package role may sign: one level each, like a
+    publisher's."""
+    return ["entitlements/*", "grants/*"]
 
 
 def served_target_path(target_path: str, sha256: str) -> str:

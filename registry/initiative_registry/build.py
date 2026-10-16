@@ -14,8 +14,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from securesystemslib.signer import Signer
+from securesystemslib.signer import Signer, SSlibKey
 from tuf.api.metadata import (
+    DelegatedRole,
     Metadata,
     MetaFile,
     Snapshot,
@@ -38,9 +39,10 @@ from .repo import (
 )
 from .sources import Blob, Listing, Publisher, load_listings, load_publishers, sha256
 
+#: The one index this builder makes. A package (initiative-packages) is built
+#: from it, adding what only a package may carry.
 PUBLIC = "public"
-HOSTED = "hosted"
-BUILD_TARGETS = (PUBLIC, HOSTED)
+BUILD_TARGETS = (PUBLIC,)
 
 #: Offline metadata closer than this to expiry is reported on every build.
 EXPIRY_WARNING_DAYS = 30
@@ -71,44 +73,61 @@ def _write_target(out: Path, blob: Blob) -> None:
 
 
 def refuse_for_target(target: str, listings: list[Listing]) -> None:
-    """The public target excludes priced, sectored and runnable listings, and
-    refuses to run over input that contains one; other targets take them.
+    """The public index refuses a runnable listing, and refuses to run over
+    input that contains one.
 
     A runtime is how a deployment runs a container on its own, so a listing
     carrying one reaches a cluster only through a package somebody reviewed
-    and pinned, never through the open index."""
+    and pinned, never through the open index. Nothing about money can be in a
+    listing at all: a listing's schema has no term for it, and a package says
+    what is billable under a role the public index never holds."""
     if target not in BUILD_TARGETS:
         raise RegistryError(
             f"unknown target {target!r}; expected one of {BUILD_TARGETS}"
         )
-    if target != PUBLIC:
-        return
-    offenders = []
-    for listing in listings:
-        reasons = []
-        if listing.priced:
-            reasons.append("a price")
-        if listing.reference_sectors:
-            reasons.append("reference sectors " + ", ".join(listing.reference_sectors))
-        if listing.runnable:
-            reasons.append("a runtime")
-        if reasons:
-            offenders.append(f"{listing.source} has {' and '.join(reasons)}")
+    offenders = [
+        f"{listing.source} has a runtime" for listing in listings if listing.runnable
+    ]
     if offenders:
         raise RegistryError(
-            "the public target takes no priced, sectored or runnable listing:\n  "
-            + "\n  ".join(offenders)
+            "the public index takes no runnable listing:\n  " + "\n  ".join(offenders)
         )
 
 
-def _check_delegations(targets: Targets, publishers: dict[str, Publisher]) -> None:
+def _check_package_delegation(
+    role: DelegatedRole | None, key: SSlibKey | None, stale: str
+) -> None:
+    """The package role is delegated exactly when its key is given, to that key
+    and over the package paths alone."""
+    if role is None and key is None:
+        return
+    if role is None:
+        raise RegistryError(f"the package role is not delegated in targets.json{stale}")
+    if key is None:
+        raise RegistryError(
+            "targets.json delegates the package role, but no package key was "
+            f"given (--package-key, default {layout.DEFAULT_PACKAGE_KEY})"
+        )
+    if role.keyids != [key.keyid]:
+        raise RegistryError(f"the package key is not the delegated one{stale}")
+    if role.paths != layout.package_delegation_paths():
+        raise RegistryError(f"the package role's delegated paths differ{stale}")
+
+
+def _check_delegations(
+    targets: Targets,
+    publishers: dict[str, Publisher],
+    package_key: SSlibKey | None = None,
+) -> None:
     """The signed targets must delegate exactly the publisher records given,
-    each to the key and the record bytes those records hold now."""
+    each to the key and the record bytes those records hold now, and the package
+    role exactly when ``package_key`` is given."""
     delegations = targets.delegations
-    roles = delegations.roles if delegations and delegations.roles else {}
+    roles = dict(delegations.roles) if delegations and delegations.roles else {}
     if layout.RESERVED_PREFIX in roles:
         raise RegistryError(f"targets.json delegates {layout.RESERVED_PREFIX!r}")
     stale = "; run sign-offline to re-sign targets.json"
+    _check_package_delegation(roles.pop(layout.PACKAGE_ROLE, None), package_key, stale)
     for prefix in sorted(set(roles) | set(publishers)):
         if prefix not in publishers:
             raise RegistryError(
@@ -195,8 +214,15 @@ def build(
     keys: KeyLookup,
     metadata_dir: Path = layout.DEFAULT_METADATA_DIR,
     publisher_dirs: list[Path] | None = None,
+    package_key: SSlibKey | None = None,
     now: datetime | None = None,
 ) -> BuildResult:
+    """Build and sign one repository.
+
+    ``package_key`` is the package role's public key when ``targets.json``
+    delegates one. The build checks the delegation and never signs the role:
+    only a package service holds its key.
+    """
     now = now or utc_now()
     if out.exists() and any(out.iterdir()):
         raise RegistryError(f"{out} is not empty; the build writes a fresh repository")
@@ -211,7 +237,7 @@ def build(
     _warn_expiring(targets_metadata, "targets.json", now)
 
     publishers = load_publishers(publisher_dirs or [layout.DEFAULT_PUBLISHERS_DIR])
-    _check_delegations(targets_metadata.signed, publishers)
+    _check_delegations(targets_metadata.signed, publishers, package_key)
     listings = load_listings(sources, publishers)
     refuse_for_target(target, listings)
 

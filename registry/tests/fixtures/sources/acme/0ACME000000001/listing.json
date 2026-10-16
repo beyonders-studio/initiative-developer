@@ -22,8 +22,6 @@
   "registration": {
     "kind": "container",
     "image": "ghcr.io/acme/tracker@sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    "scope_ceiling": ["projects:read", "projects:write", "comments:write"],
-    "reference_sectors": []
-  },
-  "price": null
+    "scope_ceiling": ["projects:read", "projects:write", "comments:write"]
+  }
 }

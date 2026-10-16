@@ -47,6 +47,7 @@ def init_root(
     snapshot_key: SSlibKey,
     timestamp_key: SSlibKey,
     publisher_dirs: list[Path],
+    package_key: SSlibKey | None = None,
     now: datetime | None = None,
 ) -> OfflineResult:
     """Create version 1 of ``root`` and the first ``targets``."""
@@ -67,7 +68,9 @@ def init_root(
     root_metadata = Metadata(root)
     root_metadata.sign(root_signer)
 
-    targets_metadata = Metadata(top_level_targets(publishers, version=1, now=now))
+    targets_metadata = Metadata(
+        top_level_targets(publishers, version=1, now=now, package_key=package_key)
+    )
     targets_metadata.sign(targets_signer)
 
     root_path = metadata_dir / "1.root.json"
@@ -106,6 +109,7 @@ def sign_offline(
     snapshot_key: SSlibKey | None = None,
     timestamp_key: SSlibKey | None = None,
     publisher_dirs: list[Path] | None = None,
+    package_key: SSlibKey | None = None,
     renew_root: bool = False,
     now: datetime | None = None,
 ) -> OfflineResult:
@@ -114,7 +118,8 @@ def sign_offline(
     State the keys each role should have. Whatever differs from the current root
     (or ``renew_root``) makes a new root version, signed by the current root key
     and, when the root key itself rotates, by the new one as well. Giving the
-    targets key re-signs ``targets`` from the publisher records.
+    targets key re-signs ``targets`` from the publisher records, and delegates
+    the package role to ``package_key`` when one is given.
     """
     now = now or utc_now()
     chain = load_root_chain(metadata_dir)
@@ -161,7 +166,11 @@ def sign_offline(
         require_role_key(root, layout.TARGETS, targets_signer)
         publishers = load_publishers(publisher_dirs or [layout.DEFAULT_PUBLISHERS_DIR])
         previous = _targets_version(metadata_dir)
-        targets = Metadata(top_level_targets(publishers, version=previous + 1, now=now))
+        targets = Metadata(
+            top_level_targets(
+                publishers, version=previous + 1, now=now, package_key=package_key
+            )
+        )
         targets.sign(targets_signer)
         path = metadata_dir / TARGETS_FILE
         _write(path, to_bytes(targets))
