@@ -115,21 +115,26 @@ them:
       `public_paths`: paths outside callers reach.
     - `facts`: environment variables the deployment fills from a closed list
       (`app_url`, `app_origin`, `app_api_public`, `app_api_internal`,
-      `page_origin`, `port`). `settings`: variables only the operator fills,
-      by name.
+      `page_origin`, `port`, `entitlement_issuer_key`). `settings`: variables
+      only the operator fills, by name. `entitlement_issuer_key` is billing's
+      Ed25519 public key (an SPKI PEM), with which the plug-in checks the
+      entitlement statements billing signs. The deployment fills it from its
+      own copy of billing's key, never from Initiative, so Initiative can
+      withhold a statement but never mint one. A deployment that runs no
+      billing leaves it unset, and the plug-in then refuses every statement.
     - `signing_key`: where the key its copy signs with goes.
     - `database`: its own Postgres, with one login per role and an idempotent
       SQL file in the image that creates them (`provision_sql`, run with each
       role's password as `<id>_password`).
     - `secrets`: values generated once and kept (`random_alnum_32`,
       `random_bytes_32`, `hex_32`, `ed25519_private_key_pem`, a PKCS#8 PEM).
-    - `metrics`, and `integrations` with Initiative's own services (billing's
-      HMAC and key, the bundled channel), which a deployment honours for its
-      own publishers only.
+    - `metrics`: where it serves metrics, and the variable holding the token
+      that reads them.
 
     There is deliberately no field for resources, a security context, a
-    service account, volumes, network rules, hostnames, a command, or the name
-    of any Secret: none of those may come from a listing. The public index
+    service account, volumes, network rules, hostnames, a command, the name
+    of any Secret, or a secret shared with Initiative's own services (billing
+    talks to no plug-in directly): none of those may come from a listing. The public index
     refuses a listing with a `runtime`, so one reaches a cluster only through a
     package somebody reviewed and pinned.
 

@@ -444,7 +444,7 @@
           }
         },
         "facts": {
-          "description": "Environment variables the deployment fills with what it knows about itself. app_url: Initiative's public URL. app_origin: its origin. app_api_public / app_api_internal: its API, from outside or from inside the cluster. page_origin: this plug-in's own origin (needs pages). port: the port above.",
+          "description": "Environment variables the deployment fills with what it knows about itself. app_url: Initiative's public URL. app_origin: its origin. app_api_public / app_api_internal: its API, from outside or from inside the cluster. page_origin: this plug-in's own origin (needs pages). port: the port above. entitlement_issuer_key: billing's Ed25519 public key (SPKI PEM) that signs entitlement statements; absent when the deployment runs no billing.",
           "type": "object",
           "maxProperties": 20,
           "propertyNames": {
@@ -458,7 +458,8 @@
               "app_api_public",
               "app_api_internal",
               "page_origin",
-              "port"
+              "port",
+              "entitlement_issuer_key"
             ]
           }
         },
@@ -604,48 +605,6 @@
             "token_env": {
               "type": "string",
               "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
-            }
-          }
-        },
-        "integrations": {
-          "description": "Shared secrets with Initiative's own services. A deployment honours these for its own publishers only.",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "billing": {
-              "type": "object",
-              "required": [
-                "hmac_env",
-                "public_key_env"
-              ],
-              "additionalProperties": false,
-              "properties": {
-                "hmac_env": {
-                  "type": "string",
-                  "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
-                },
-                "hmac_previous_env": {
-                  "type": "string",
-                  "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
-                },
-                "public_key_env": {
-                  "type": "string",
-                  "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
-                }
-              }
-            },
-            "bundled_channel": {
-              "type": "object",
-              "required": [
-                "env"
-              ],
-              "additionalProperties": false,
-              "properties": {
-                "env": {
-                  "type": "string",
-                  "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
-                }
-              }
             }
           }
         }
