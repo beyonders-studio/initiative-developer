@@ -8,7 +8,7 @@ import pytest
 from tuf.api.metadata import Metadata, Targets
 
 from initiative_registry import RegistryError, layout
-from initiative_registry.keys import generate, signer_from_path
+from initiative_registry.keys import generate, load_public_key, signer_from_path
 from initiative_registry.offline import init_root, sign_offline
 from initiative_registry.repo import (
     TARGETS_FILE,
@@ -137,10 +137,17 @@ def test_committed_targets_delegates_the_committed_publishers() -> None:
     data = (layout.DEFAULT_METADATA_DIR / TARGETS_FILE).read_bytes()
     signed = Metadata[Targets].from_bytes(data)
     root.verify_delegate(layout.TARGETS, signed.signed_bytes, signed.signatures)
+    # And the package role, once its public key is committed (roles/).
+    package_key = (
+        load_public_key(layout.DEFAULT_PACKAGE_KEY)
+        if layout.DEFAULT_PACKAGE_KEY.is_file()
+        else None
+    )
     expected = top_level_targets(
         load_publishers([layout.DEFAULT_PUBLISHERS_DIR]),
         version=signed.signed.version,
         now=utc_now(),
+        package_key=package_key,
     )
     assert signed.signed.delegations == expected.delegations
     assert signed.signed.targets == expected.targets
