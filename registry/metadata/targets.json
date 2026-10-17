@@ -1,8 +1,8 @@
 {
  "signatures": [
   {
-   "keyid": "69a87c1eebbf08d8d14d10440534a5e821b40d6a0eee4b09fa85358a7216cd3b",
-   "sig": "e42c03a12f85b305b735a15008bddb696dc56a536e31718fc4d5535bfe44755d0822f26ba80fce9c36daa75de90999e6da67780f8e9cdc4b03b7cf95247f6103"
+   "keyid": "67f92799b47e3abfdbd006e40b4ec423723784f837b30e00d48ea42df56877c2",
+   "sig": "7bd641fa2a3c4162671e0a673a3387cd88285f955a6a29a79ed516f8ee2c40812aa561c4e097eed5b0b15f9b87bc0f6f92ea7c6371db8bffb3070104dec85401"
   }
  ],
  "signed": {
@@ -13,6 +13,13 @@
      "keytype": "ed25519",
      "keyval": {
       "public": "8586d25fc9768c6ad7e369ce8c33616d1048455c711b2660b2703bf3ae930118"
+     },
+     "scheme": "ed25519"
+    },
+    "ebc937f886ff4432577864b43a0554805f04c1faee50d62df25b96536c765131": {
+     "keytype": "ed25519",
+     "keyval": {
+      "public": "8e6fcb6b803bdaaaa866dd5fd8c84129798bcb75f0f1d820735d9195b96d2c57"
      },
      "scheme": "ed25519"
     }
@@ -30,10 +37,22 @@
      ],
      "terminating": true,
      "threshold": 1
+    },
+    {
+     "keyids": [
+      "ebc937f886ff4432577864b43a0554805f04c1faee50d62df25b96536c765131"
+     ],
+     "name": "package",
+     "paths": [
+      "entitlements/*",
+      "grants/*"
+     ],
+     "terminating": true,
+     "threshold": 1
     }
    ]
   },
-  "expires": "2027-10-06T20:15:50Z",
+  "expires": "2027-10-17T18:27:17Z",
   "spec_version": "1.0.31",
   "targets": {
    "publishers/beyonders-studio.json": {
@@ -43,6 +62,6 @@
     "length": 400
    }
   },
-  "version": 2
+  "version": 1
  }
 }
