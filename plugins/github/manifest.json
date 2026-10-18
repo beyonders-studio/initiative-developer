@@ -252,13 +252,12 @@
         "exchange_url": "https://api.github.com/app/installations/{installation_id}/access_tokens",
         "exchange_body": {
           "permissions": {
-            "issues": "read",
-            "pull_requests": "read",
+            "issues": "write",
+            "pull_requests": "write",
             "contents": "read",
             "checks": "read",
             "statuses": "read",
             "vulnerability_alerts": "read",
-            "organization_projects": "read",
             "metadata": "read"
           }
         },
@@ -2612,12 +2611,12 @@
       "group": "projects",
       "public": true,
       "actors": [
-        "installation",
         "member"
       ],
       "requires": {
         "all_of": [
-          "workspace"
+          "workspace",
+          "account"
         ]
       },
       "cache_ttl_seconds": 300,
@@ -2691,7 +2690,7 @@
           "query": "query Boards($login: String!, $first: Int!) { repositoryOwner(login: $login) { ... on Organization { projectsV2(first: $first) { totalCount nodes { id title number url } } } ... on User { projectsV2(first: $first) { totalCount nodes { id title number url } } } } }",
           "variables": "{\"login\": connections.workspace.owner, \"first\": 100}"
         },
-        "connection": "workspace"
+        "connection": "account"
       },
       "errors": [
         {
@@ -2735,12 +2734,12 @@
       "group": "projects",
       "public": true,
       "actors": [
-        "installation",
         "member"
       ],
       "requires": {
         "all_of": [
-          "workspace"
+          "workspace",
+          "account"
         ]
       },
       "cache_ttl_seconds": 300,
@@ -2817,7 +2816,7 @@
           "query": "query Fields($project: ID!, $first: Int!) { node(id: $project) { ... on ProjectV2 { owner { ... on Organization { login } ... on User { login } } fields(first: $first) { nodes { ... on ProjectV2SingleSelectField { id name options { id name } } } } } } }",
           "variables": "{\"project\": params.project_id, \"first\": 100}"
         },
-        "connection": "workspace"
+        "connection": "account"
       },
       "unavailable": [
         "project-required",
@@ -2876,12 +2875,12 @@
       "group": "projects",
       "public": true,
       "actors": [
-        "installation",
         "member"
       ],
       "requires": {
         "all_of": [
-          "workspace"
+          "workspace",
+          "account"
         ]
       },
       "cache_ttl_seconds": 300,
@@ -2974,7 +2973,7 @@
           "query": "query Fields($project: ID!, $first: Int!) { node(id: $project) { ... on ProjectV2 { owner { ... on Organization { login } ... on User { login } } fields(first: $first) { nodes { ... on ProjectV2SingleSelectField { id name options { id name } } } } } } }",
           "variables": "{\"project\": params.project_id, \"first\": 100}"
         },
-        "connection": "workspace"
+        "connection": "account"
       },
       "unavailable": [
         "field-required",
@@ -3045,12 +3044,12 @@
       "group": "projects",
       "public": true,
       "actors": [
-        "installation",
         "member"
       ],
       "requires": {
         "all_of": [
-          "workspace"
+          "workspace",
+          "account"
         ]
       },
       "cache_ttl_seconds": 0,
@@ -3141,7 +3140,7 @@
           "query": "query Card($owner: String!, $repo: String!, $number: Int!, $first: Int!) { repository(owner: $owner, name: $repo) { name owner { login } issueOrPullRequest(number: $number) { ... on Issue { projectItems(first: $first) { nodes { id project { id } } } } ... on PullRequest { projectItems(first: $first) { nodes { id project { id } } } } } } }",
           "variables": "{\"owner\": connections.workspace.owner, \"repo\": (\n  $repo := params.repo;\n  $type($repo) = \"string\" and $length($repo) <= 100 and $contains($repo, /^[A-Za-z0-9._-]+$/) and $not($repo in [\".\", \"..\"])\n    ? $repo : \"\"\n), \"number\": params.number, \"first\": 100}"
         },
-        "connection": "workspace"
+        "connection": "account"
       },
       "unavailable": [
         "repository-required",
@@ -3814,20 +3813,20 @@
         "fr": "Ouvrir un ticket"
       },
       "description": {
-        "en": "Opens one in a repository the installation covers, as the member.",
-        "de": "Öffnet eines in einem Repository der Installation, als das Mitglied.",
-        "es": "Abre una en un repositorio que cubre la instalación, como el miembro.",
-        "fr": "En ouvre un dans un dépôt couvert par l'installation, en tant que le membre."
+        "en": "Opens one in a repository the installation covers, as the member or as the organization.",
+        "de": "Öffnet eines in einem Repository der Installation, als das Mitglied oder als die Organisation.",
+        "es": "Abre una en un repositorio que cubre la instalación, como el miembro o como la organización.",
+        "fr": "En ouvre un dans un dépôt couvert par l'installation, en tant que le membre ou l'organisation."
       },
       "group": "issues",
       "public": true,
       "actors": [
-        "member"
+        "member",
+        "installation"
       ],
       "requires": {
         "all_of": [
-          "workspace",
-          "account"
+          "workspace"
         ]
       },
       "params": [
@@ -3948,7 +3947,10 @@
           "X-GitHub-Api-Version": "\"2022-11-28\"",
           "User-Agent": "\"initiative-github\""
         },
-        "connection": "account",
+        "connection": {
+          "member": "account",
+          "installation": "workspace"
+        },
         "body": "$merge([\n      {\"title\": params.title},\n      params.body ? {\"body\": params.body},\n      $count(params.labels) ? {\"labels\": [params.labels]},\n      $count(params.assignees) ? {\"assignees\": [params.assignees]}\n    ])"
       },
       "errors": [
@@ -3985,20 +3987,20 @@
         "fr": "Commenter"
       },
       "description": {
-        "en": "Adds a comment to an issue or a pull request, as the member.",
-        "de": "Fügt einem Issue oder Pull Request einen Kommentar hinzu, als das Mitglied.",
-        "es": "Añade un comentario a una incidencia o pull request, como el miembro.",
-        "fr": "Ajoute un commentaire à un ticket ou une pull request, en tant que le membre."
+        "en": "Adds a comment to an issue or a pull request, as the member or as the organization.",
+        "de": "Fügt einem Issue oder Pull Request einen Kommentar hinzu, als das Mitglied oder als die Organisation.",
+        "es": "Añade un comentario a una incidencia o pull request, como el miembro o como la organización.",
+        "fr": "Ajoute un commentaire à un ticket ou une pull request, en tant que le membre ou l'organisation."
       },
       "group": "issues",
       "public": true,
       "actors": [
-        "member"
+        "member",
+        "installation"
       ],
       "requires": {
         "all_of": [
-          "workspace",
-          "account"
+          "workspace"
         ]
       },
       "params": [
@@ -4083,7 +4085,10 @@
           "X-GitHub-Api-Version": "\"2022-11-28\"",
           "User-Agent": "\"initiative-github\""
         },
-        "connection": "account",
+        "connection": {
+          "member": "account",
+          "installation": "workspace"
+        },
         "body": "{\"body\": params.body}"
       },
       "errors": [
@@ -4120,20 +4125,20 @@
         "fr": "Fermer un ticket"
       },
       "description": {
-        "en": "Closes it as completed or as not planned, as the member.",
-        "de": "Schließt es als erledigt oder als nicht geplant, als das Mitglied.",
-        "es": "La cierra como completada o como no planificada, como el miembro.",
-        "fr": "Le ferme comme terminé ou comme non planifié, en tant que le membre."
+        "en": "Closes it as completed or as not planned, as the member or as the organization.",
+        "de": "Schließt es als erledigt oder als nicht geplant, als das Mitglied oder als die Organisation.",
+        "es": "La cierra como completada o como no planificada, como el miembro o como la organización.",
+        "fr": "Le ferme comme terminé ou comme non planifié, en tant que le membre ou l'organisation."
       },
       "group": "issues",
       "public": true,
       "actors": [
-        "member"
+        "member",
+        "installation"
       ],
       "requires": {
         "all_of": [
-          "workspace",
-          "account"
+          "workspace"
         ]
       },
       "params": [
@@ -4215,7 +4220,10 @@
           "X-GitHub-Api-Version": "\"2022-11-28\"",
           "User-Agent": "\"initiative-github\""
         },
-        "connection": "account",
+        "connection": {
+          "member": "account",
+          "installation": "workspace"
+        },
         "body": "$merge([{\"state\": \"closed\"}, params.reason in [\"completed\", \"not_planned\"] ? {\"state_reason\": params.reason}])"
       },
       "errors": [
@@ -4252,20 +4260,20 @@
         "fr": "Rouvrir un ticket"
       },
       "description": {
-        "en": "Puts a closed issue back into the open state, as the member.",
-        "de": "Versetzt ein geschlossenes Issue zurück in den offenen Zustand, als das Mitglied.",
-        "es": "Devuelve una incidencia cerrada al estado abierto, como el miembro.",
-        "fr": "Remet un ticket fermé à l'état ouvert, en tant que le membre."
+        "en": "Puts a closed issue back into the open state, as the member or as the organization.",
+        "de": "Versetzt ein geschlossenes Issue zurück in den offenen Zustand, als das Mitglied oder als die Organisation.",
+        "es": "Devuelve una incidencia cerrada al estado abierto, como el miembro o como la organización.",
+        "fr": "Remet un ticket fermé à l'état ouvert, en tant que le membre ou l'organisation."
       },
       "group": "issues",
       "public": true,
       "actors": [
-        "member"
+        "member",
+        "installation"
       ],
       "requires": {
         "all_of": [
-          "workspace",
-          "account"
+          "workspace"
         ]
       },
       "params": [
@@ -4333,7 +4341,10 @@
           "X-GitHub-Api-Version": "\"2022-11-28\"",
           "User-Agent": "\"initiative-github\""
         },
-        "connection": "account",
+        "connection": {
+          "member": "account",
+          "installation": "workspace"
+        },
         "body": "{\"state\": \"open\"}"
       },
       "errors": [
@@ -4370,20 +4381,20 @@
         "fr": "Modifier les étiquettes"
       },
       "description": {
-        "en": "Adds or removes labels on an issue or a pull request, as the member.",
-        "de": "Fügt an einem Issue oder Pull Request Labels hinzu oder entfernt sie, als das Mitglied.",
-        "es": "Añade o quita etiquetas en una incidencia o pull request, como el miembro.",
-        "fr": "Ajoute ou retire des étiquettes sur un ticket ou une pull request, en tant que le membre."
+        "en": "Adds or removes labels on an issue or a pull request, as the member or as the organization.",
+        "de": "Fügt an einem Issue oder Pull Request Labels hinzu oder entfernt sie, als das Mitglied oder als die Organisation.",
+        "es": "Añade o quita etiquetas en una incidencia o pull request, como el miembro o como la organización.",
+        "fr": "Ajoute ou retire des étiquettes sur un ticket ou une pull request, en tant que le membre ou l'organisation."
       },
       "group": "issues",
       "public": true,
       "actors": [
-        "member"
+        "member",
+        "installation"
       ],
       "requires": {
         "all_of": [
-          "workspace",
-          "account"
+          "workspace"
         ]
       },
       "params": [
@@ -4489,7 +4500,10 @@
               "X-GitHub-Api-Version": "\"2022-11-28\"",
               "User-Agent": "\"initiative-github\""
             },
-            "connection": "account",
+            "connection": {
+              "member": "account",
+              "installation": "workspace"
+            },
             "body": "(\n          $add := [params.add];\n          $gone := [params.remove.$lowercase($), $add.$lowercase($)];\n          {\"labels\": [steps.issue.body.labels.name[$not($lowercase($) in $gone)], $distinct($add)]}\n        )"
           }
         }
@@ -4533,20 +4547,20 @@
         "fr": "Demander une revue"
       },
       "description": {
-        "en": "Asks people or teams to review a pull request, as the member.",
-        "de": "Bittet Personen oder Teams, einen Pull Request zu prüfen, als das Mitglied.",
-        "es": "Pide a personas o equipos que revisen una pull request, como el miembro.",
-        "fr": "Demande à des personnes ou des équipes de relire une pull request, en tant que le membre."
+        "en": "Asks people or teams to review a pull request, as the member or as the organization.",
+        "de": "Bittet Personen oder Teams, einen Pull Request zu prüfen, als das Mitglied oder als die Organisation.",
+        "es": "Pide a personas o equipos que revisen una pull request, como el miembro o como la organización.",
+        "fr": "Demande à des personnes ou des équipes de relire une pull request, en tant que le membre ou l'organisation."
       },
       "group": "reviews",
       "public": true,
       "actors": [
-        "member"
+        "member",
+        "installation"
       ],
       "requires": {
         "all_of": [
-          "workspace",
-          "account"
+          "workspace"
         ]
       },
       "params": [
@@ -4639,7 +4653,10 @@
           "X-GitHub-Api-Version": "\"2022-11-28\"",
           "User-Agent": "\"initiative-github\""
         },
-        "connection": "account",
+        "connection": {
+          "member": "account",
+          "installation": "workspace"
+        },
         "body": "$merge([\n      $count(params.reviewers) ? {\"reviewers\": [params.reviewers]},\n      $count(params.team_reviewers) ? {\"team_reviewers\": [params.team_reviewers]}\n    ])"
       },
       "errors": [

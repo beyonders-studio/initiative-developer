@@ -2,8 +2,9 @@
 
 ## [Unreleased]
 
-Tasks link to the GitHub branches and pull requests that name them, and a
-member sees their own review requests and pull requests in any community.
+Tasks link to the GitHub branches and pull requests that name them, a member
+sees their own review requests and pull requests in any community, and a write
+can be made as the organization.
 
 ### Added
 
@@ -30,6 +31,11 @@ member sees their own review requests and pull requests in any community.
 - `linked-work` and the *Linked pull requests* widget: the organization's open
   pull requests that name one of the community's tasks, with each task they
   name.
+- Writes can be made as the organization. When another plug-in calls one as
+  the community, such as an automation posting as the organization, it runs on
+  the organization's installation, and GitHub shows the GitHub App as its
+  author; made as a member, it still runs on their own GitHub account. Start a
+  branch and Move a project card stay the member's alone.
 
 ### Changed
 
@@ -39,9 +45,14 @@ member sees their own review requests and pull requests in any community.
 - The plug-in asks a community to let it read projects (`projects:read`): it
   keeps its links on tasks.
 - Initiative asks GitHub for the organization's installation tokens with read
-  access alone, where they carried all of the GitHub App's permissions: every
-  call the plug-in makes as the installation reads, and writes run on a
-  member's own token.
+  access and, for the writes made as the organization, write access to issues
+  and pull requests, where they carried all of the GitHub App's permissions.
+  No installation token can change a repository's contents.
+- `list-projects`, `list-project-fields`, `list-project-options` and
+  `find-project-item` take a member alone and read on their own GitHub
+  account, as `move-project-item` already did, where they read on the
+  organization's installation: its tokens are not asked for the
+  organization's Projects permission.
 
 ### Upgrading
 
@@ -49,19 +60,17 @@ member sees their own review requests and pull requests in any community.
   *Read-only* and Commit statuses: *Read-only*, and subscribe it to the
   Delete, Pull request review and Check suite events. Each organization owner
   then accepts the new permissions in GitHub, Contents write, Checks read and
-  Commit statuses read. Until they do, GitHub mints no token for the
-  installation, since each asks to read checks and commit statuses: whatever
-  reads as the organization is refused, Change labels included, and so is
-  Start a branch.
+  Commit statuses read.
 - A GitHub installation on a personal account is connected once more, with
   **Connect** on *GitHub organization*, so the plug-in searches its pull
   requests as a user's. An organization's carries on as it is.
 - In each community, a superadmin accepts this version from the plug-in's
   **Update** button, letting it read projects.
 - Needs an Initiative serving the plug-in API that keeps a declarative
-  plug-in's lists, settings, actions and schedules, and narrows the tokens it
-  mints; the manifest's `min_plugin_api` names it, and an older Initiative
-  refuses to install it.
+  plug-in's lists, settings, actions and schedules, resolves a request's
+  connection by the call's actor, and narrows the tokens it mints; the
+  manifest's `min_plugin_api` names it, and an older Initiative refuses to
+  install it.
 
 ## [6.0.0]
 

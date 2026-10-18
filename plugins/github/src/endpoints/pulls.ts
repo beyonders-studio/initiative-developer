@@ -41,6 +41,7 @@ import {
   WORKSPACE,
 } from "../vocabulary.js";
 import {
+  AS_MEMBER,
   GITHUB_ERRORS,
   graphql,
   LIMIT,
@@ -48,6 +49,7 @@ import {
   NEEDS_NUMBER,
   NEEDS_REPO,
   PAGE,
+  PER_ACTOR,
   PERSONAL_READ,
   PUBLIC_READ,
   PUBLIC_WRITE,
@@ -199,9 +201,7 @@ export const reviewQueue = defineEndpoint({
     "Les pull requests d'un dépôt qui ont demandé la revue du membre."
   ),
   group: "reviews",
-  public: true,
-  actors: ["member"],
-  requires: { all_of: [WORKSPACE, ACCOUNT] },
+  ...AS_MEMBER,
   cache_ttl_seconds: 60,
   params: { ...PULL_PARAMS, ...ORDER_IN },
   returns: ROWS_OUT,
@@ -497,10 +497,10 @@ export const requestReview = defineEndpoint({
   direction: "write",
   label: text("Request a review", "Review anfragen", "Solicitar una revisión", "Demander une revue"),
   description: text(
-    "Asks people or teams to review a pull request, as the member.",
-    "Bittet Personen oder Teams, einen Pull Request zu prüfen, als das Mitglied.",
-    "Pide a personas o equipos que revisen una pull request, como el miembro.",
-    "Demande à des personnes ou des équipes de relire une pull request, en tant que le membre."
+    "Asks people or teams to review a pull request, as the member or as the organization.",
+    "Bittet Personen oder Teams, einen Pull Request zu prüfen, als das Mitglied oder als die Organisation.",
+    "Pide a personas o equipos que revisen una pull request, como el miembro o como la organización.",
+    "Demande à des personnes ou des équipes de relire une pull request, en tant que le membre ou l'organisation."
   ),
   group: "reviews",
   ...PUBLIC_WRITE,
@@ -518,7 +518,7 @@ export const requestReview = defineEndpoint({
   returns: { ...REPO_OUT, ...NUMBER_OUT, ...LINK_OUT },
   identity: ISSUE_IDENTITY,
   request: rest("POST", `${REPO_PATH} & "/pulls/" & params.number & "/requested_reviewers"`, {
-    connection: ACCOUNT,
+    connection: PER_ACTOR,
     body: `$merge([
       $count(params.reviewers) ? {"reviewers": [params.reviewers]},
       $count(params.team_reviewers) ? {"team_reviewers": [params.team_reviewers]}

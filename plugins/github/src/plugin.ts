@@ -44,25 +44,32 @@ const PERMISSIONS: Readonly<Record<string, GithubPermissionLevel>> = {
   checks: "read",
   statuses: "read",
   vulnerability_alerts: "read",
+  // The organization's project boards, which a member's own token reads and
+  // moves cards on.
   organization_projects: "write",
   metadata: "read",
 };
 
 /**
  * What each token Initiative mints for the organization's installation may do,
- * asked of GitHub every time: read, since every call the plug-in makes as the
- * installation reads. Writes, Start a branch's among them, run on a member's
- * own token, so no installation token can change a repository. GitHub mints
- * none until the installation's owner has accepted every one of these.
+ * asked of GitHub every time: read, and write the issues and pull requests a
+ * write made as the organization changes. GitHub's issues API serves a pull
+ * request's comments, state and labels too. No installation token writes a
+ * repository's contents: Start a branch runs on the member's own token.
+ *
+ * Each is a repository's permission, which an installation on an organization
+ * and one on a personal account hold alike, and GitHub mints nothing for a
+ * request naming one the installation was not granted. The organization's
+ * Projects permission is not asked for: project boards are read and moved on
+ * the member's own token.
  */
 const INSTALLATION_PERMISSIONS: Readonly<Record<string, GithubPermissionLevel>> = {
-  issues: "read",
-  pull_requests: "read",
+  issues: "write",
+  pull_requests: "write",
   contents: "read",
   checks: "read",
   statuses: "read",
   vulnerability_alerts: "read",
-  organization_projects: "read",
   metadata: "read",
 };
 

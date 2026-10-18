@@ -4,6 +4,7 @@
  * included; and the actions and the schedule that keep a task's links.
  */
 
+import type { ActorKind } from "initiative-plugin-sdk/manifest";
 import { runAction, runEndpoint, runSchedule, type RecordedResponse } from "initiative-plugin-sdk/testing";
 import { describe, expect, it } from "vitest";
 
@@ -23,16 +24,37 @@ const HEADERS = {
 /** The install's prefix, `acme`, and the one it had before, `old`. */
 const INSTALL = { settings: { task_prefix: "acme" }, aliases: { task_prefix: ["old"] } };
 
-/** One endpoint, called with `params`, answered in turn by each recorded body or answer. */
-function call(name: string, params: Record<string, unknown>, ...answers: Array<string | RecordedResponse>) {
-  return runEndpoint(plugin, name, {
-    params,
-    connections: CONNECTIONS,
-    ...INSTALL,
-    now: NOW,
-    responses: answers.map((answer) => (typeof answer === "string" ? { body: recorded(answer) } : answer)),
-  });
-}
+/** One endpoint, called as `actor` (by default its first) with `params`, answered in turn by each recorded body or answer. */
+const as =
+  (actor?: ActorKind) =>
+  (name: string, params: Record<string, unknown>, ...answers: Array<string | RecordedResponse>) =>
+    runEndpoint(plugin, name, {
+      params,
+      connections: CONNECTIONS,
+      ...INSTALL,
+      now: NOW,
+      actor,
+      responses: answers.map((answer) => (typeof answer === "string" ? { body: recorded(answer) } : answer)),
+    });
+
+const call = as();
+
+/** Who a write is made as, and the connection whose credential it then carries. */
+const ACTORS = [
+  ["member", "account"],
+  ["installation", "workspace"],
+] as const;
+
+/** The reads made on the member's own account; every other reads on the organization's installation. */
+const ON_ACCOUNT: string[] = [
+  READ.reviewQueue,
+  READ.myReviewRequests,
+  READ.myPullRequests,
+  READ.listProjects,
+  READ.listProjectFields,
+  READ.listProjectOptions,
+  READ.findProjectItem,
+];
 
 const variables = (run: { requests: Array<{ body?: unknown }> }) =>
   (run.requests[0].body as { variables: Record<string, unknown> }).variables;
@@ -273,7 +295,10 @@ describe("reads", () => {
     it(`${one.name} answers from GitHub's answer`, async () => {
       const run = await call(one.name, one.params, ...one.answers);
       expect(run).toEqual({ requests: expect.any(Array), result: one.result });
-      for (const request of run.requests) expect(request.headers).toEqual(HEADERS);
+      for (const request of run.requests) {
+        expect(request.headers).toEqual(HEADERS);
+        expect(request.connection).toBe(ON_ACCOUNT.includes(one.name) ? "account" : "workspace");
+      }
     });
 
     it(`${one.name} says so when GitHub refuses the installation`, async () => {
@@ -507,7 +532,7 @@ describe("reads", () => {
 interface WriteCase {
   name: string;
   params: Record<string, unknown>;
-  /** The change it makes as the member, and GitHub's answer. */
+  /** The change it makes, and GitHub's answer. */
   change: [method: string, path: string, body: unknown];
   answer: string;
   result: Record<string, unknown>;
@@ -559,12 +584,14 @@ describe("writes", () => {
   });
 
   for (const one of WRITES) {
-    it(`${one.name} writes as the member, in the repository on the organization`, async () => {
-      const run = await call(one.name, one.params, one.answer);
-      const [method, path, body] = one.change;
-      expect(run.requests).toEqual([{ method, url: `${API}${path}`, headers: HEADERS, body, connection: "account" }]);
-      expect(run).toMatchObject({ result: one.result });
-    });
+    for (const [actor, connection] of ACTORS) {
+      it(`${one.name} writes as the ${actor} on the ${connection} connection, in the repository on the organization`, async () => {
+        const run = await as(actor)(one.name, one.params, one.answer);
+        const [method, path, body] = one.change;
+        expect(run.requests).toEqual([{ method, url: `${API}${path}`, headers: HEADERS, body, connection }]);
+        expect(run).toMatchObject({ result: one.result });
+      });
+    }
   }
 
   it("passes GitHub's refusal of the member through", async () => {
@@ -588,24 +615,26 @@ describe("writes", () => {
     }
   });
 
-  it("label reads the issue's labels, then sets them as the member", async () => {
-    const run = await call(
-      WRITE.label,
-      { repo: "widgets", number: 7, add: ["triage", "bug"], remove: ["wontfix"] },
-      "rest/issue",
-      "rest/labels"
-    );
-    expect(run.requests).toEqual([
-      { method: "GET", url: `${API}/repos/acme/widgets/issues/7`, headers: HEADERS, connection: "workspace" },
-      {
-        method: "PUT",
-        url: `${API}/repos/acme/widgets/issues/7/labels`,
-        headers: HEADERS,
-        body: { labels: ["triage", "bug"] },
-        connection: "account",
-      },
-    ]);
-    expect(run).toMatchObject({ result: { repository: "widgets", number: 7 } });
+  it("label reads the issue's labels as the organization, then sets them as whoever the call is made as", async () => {
+    for (const [actor, connection] of ACTORS) {
+      const run = await as(actor)(
+        WRITE.label,
+        { repo: "widgets", number: 7, add: ["triage", "bug"], remove: ["wontfix"] },
+        "rest/issue",
+        "rest/labels"
+      );
+      expect(run.requests).toEqual([
+        { method: "GET", url: `${API}/repos/acme/widgets/issues/7`, headers: HEADERS, connection: "workspace" },
+        {
+          method: "PUT",
+          url: `${API}/repos/acme/widgets/issues/7/labels`,
+          headers: HEADERS,
+          body: { labels: ["triage", "bug"] },
+          connection,
+        },
+      ]);
+      expect(run).toMatchObject({ result: { repository: "widgets", number: 7 } });
+    }
   });
 
   it("label keeps a label named both to add and to remove, and may remove every label", async () => {

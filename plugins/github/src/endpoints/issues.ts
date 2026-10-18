@@ -1,7 +1,6 @@
 import { defineEndpoint } from "initiative-plugin-sdk/manifest";
 
 import {
-  ACCOUNT,
   ASSIGNEES_OUT,
   AUTHOR_OUT,
   CLOSED_OUT,
@@ -46,6 +45,7 @@ import {
   NEEDS_REPO,
   ORDERING,
   PAGE,
+  PER_ACTOR,
   PUBLIC_READ,
   PUBLIC_WRITE,
   REPO_PATH,
@@ -246,11 +246,11 @@ export const findIssues = defineEndpoint({
   )`,
 });
 
-/** An issue's state changed as the member, with GitHub's reason when it closes. */
+/** An issue's state changed as whoever the call is made as, with GitHub's reason when it closes. */
 function setState(closing: boolean) {
   return {
     request: rest("PATCH", `${REPO_PATH} & "/issues/" & params.number`, {
-      connection: ACCOUNT,
+      connection: PER_ACTOR,
       body: closing
         ? `$merge([{"state": "closed"}, params.reason in ["completed", "not_planned"] ? {"state_reason": params.reason}])`
         : `{"state": "open"}`,
@@ -269,10 +269,10 @@ export const openIssue = defineEndpoint({
   direction: "write",
   label: text("Open an issue", "Issue öffnen", "Abrir una incidencia", "Ouvrir un ticket"),
   description: text(
-    "Opens one in a repository the installation covers, as the member.",
-    "Öffnet eines in einem Repository der Installation, als das Mitglied.",
-    "Abre una en un repositorio que cubre la instalación, como el miembro.",
-    "En ouvre un dans un dépôt couvert par l'installation, en tant que le membre."
+    "Opens one in a repository the installation covers, as the member or as the organization.",
+    "Öffnet eines in einem Repository der Installation, als das Mitglied oder als die Organisation.",
+    "Abre una en un repositorio que cubre la instalación, como el miembro o como la organización.",
+    "En ouvre un dans un dépôt couvert par l'installation, en tant que le membre ou l'organisation."
   ),
   group: "issues",
   ...PUBLIC_WRITE,
@@ -294,7 +294,7 @@ export const openIssue = defineEndpoint({
   },
   identity: ISSUE_IDENTITY,
   request: rest("POST", `${REPO_PATH} & "/issues"`, {
-    connection: ACCOUNT,
+    connection: PER_ACTOR,
     body: `$merge([
       {"title": params.title},
       params.body ? {"body": params.body},
@@ -315,10 +315,10 @@ export const comment = defineEndpoint({
   direction: "write",
   label: text("Comment", "Kommentieren", "Comentar", "Commenter"),
   description: text(
-    "Adds a comment to an issue or a pull request, as the member.",
-    "Fügt einem Issue oder Pull Request einen Kommentar hinzu, als das Mitglied.",
-    "Añade un comentario a una incidencia o pull request, como el miembro.",
-    "Ajoute un commentaire à un ticket ou une pull request, en tant que le membre."
+    "Adds a comment to an issue or a pull request, as the member or as the organization.",
+    "Fügt einem Issue oder Pull Request einen Kommentar hinzu, als das Mitglied oder als die Organisation.",
+    "Añade un comentario a una incidencia o pull request, como el miembro o como la organización.",
+    "Ajoute un commentaire à un ticket ou une pull request, en tant que le membre ou l'organisation."
   ),
   group: "issues",
   ...PUBLIC_WRITE,
@@ -333,7 +333,7 @@ export const comment = defineEndpoint({
   },
   identity: ISSUE_IDENTITY,
   request: rest("POST", `${REPO_PATH} & "/issues/" & params.number & "/comments"`, {
-    connection: ACCOUNT,
+    connection: PER_ACTOR,
     body: `{"body": params.body}`,
   }),
   errors: GITHUB_ERRORS,
@@ -351,10 +351,10 @@ export const closeIssue = defineEndpoint({
   direction: "write",
   label: text("Close an issue", "Issue schließen", "Cerrar una incidencia", "Fermer un ticket"),
   description: text(
-    "Closes it as completed or as not planned, as the member.",
-    "Schließt es als erledigt oder als nicht geplant, als das Mitglied.",
-    "La cierra como completada o como no planificada, como el miembro.",
-    "Le ferme comme terminé ou comme non planifié, en tant que le membre."
+    "Closes it as completed or as not planned, as the member or as the organization.",
+    "Schließt es als erledigt oder als nicht geplant, als das Mitglied oder als die Organisation.",
+    "La cierra como completada o como no planificada, como el miembro o como la organización.",
+    "Le ferme comme terminé ou comme non planifié, en tant que le membre ou l'organisation."
   ),
   group: "issues",
   ...PUBLIC_WRITE,
@@ -372,10 +372,10 @@ export const reopenIssue = defineEndpoint({
   direction: "write",
   label: text("Reopen an issue", "Issue wieder öffnen", "Reabrir una incidencia", "Rouvrir un ticket"),
   description: text(
-    "Puts a closed issue back into the open state, as the member.",
-    "Versetzt ein geschlossenes Issue zurück in den offenen Zustand, als das Mitglied.",
-    "Devuelve una incidencia cerrada al estado abierto, como el miembro.",
-    "Remet un ticket fermé à l'état ouvert, en tant que le membre."
+    "Puts a closed issue back into the open state, as the member or as the organization.",
+    "Versetzt ein geschlossenes Issue zurück in den offenen Zustand, als das Mitglied oder als die Organisation.",
+    "Devuelve una incidencia cerrada al estado abierto, como el miembro o como la organización.",
+    "Remet un ticket fermé à l'état ouvert, en tant que le membre ou l'organisation."
   ),
   group: "issues",
   ...PUBLIC_WRITE,
@@ -389,10 +389,10 @@ export const label = defineEndpoint({
   direction: "write",
   label: text("Change labels", "Labels ändern", "Cambiar etiquetas", "Modifier les étiquettes"),
   description: text(
-    "Adds or removes labels on an issue or a pull request, as the member.",
-    "Fügt an einem Issue oder Pull Request Labels hinzu oder entfernt sie, als das Mitglied.",
-    "Añade o quita etiquetas en una incidencia o pull request, como el miembro.",
-    "Ajoute ou retire des étiquettes sur un ticket ou une pull request, en tant que le membre."
+    "Adds or removes labels on an issue or a pull request, as the member or as the organization.",
+    "Fügt an einem Issue oder Pull Request Labels hinzu oder entfernt sie, als das Mitglied oder als die Organisation.",
+    "Añade o quita etiquetas en una incidencia o pull request, como el miembro o como la organización.",
+    "Ajoute ou retire des étiquettes sur un ticket ou une pull request, en tant que le membre ou l'organisation."
   ),
   group: "issues",
   ...PUBLIC_WRITE,
@@ -404,14 +404,14 @@ export const label = defineEndpoint({
   returns: { ...REPO_OUT, ...NUMBER_OUT },
   identity: ISSUE_IDENTITY,
   // The issue's labels now, read on the installation, then the whole set
-  // written as the member. Naming a label in both lists ends with it present;
-  // GitHub matches label names without regard to case.
+  // written as whoever the call is made as. Naming a label in both lists ends
+  // with it present; GitHub matches label names without regard to case.
   steps: [
     { name: "issue", request: rest("GET", `${REPO_PATH} & "/issues/" & params.number`) },
     {
       name: "labels",
       request: rest("PUT", `${REPO_PATH} & "/issues/" & params.number & "/labels"`, {
-        connection: ACCOUNT,
+        connection: PER_ACTOR,
         body: `(
           $add := [params.add];
           $gone := [params.remove.$lowercase($), $add.$lowercase($)];

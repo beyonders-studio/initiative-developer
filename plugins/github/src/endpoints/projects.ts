@@ -1,3 +1,10 @@
+/**
+ * The organization's Projects boards. Every call here runs on the member's own
+ * GitHub account: a GitHub App's tokens reach an organization's boards only
+ * with the organization's Projects permission, which the installation's tokens
+ * are not asked for, and no GitHub App's tokens reach a personal account's.
+ */
+
 import { defineEndpoint } from "initiative-plugin-sdk/manifest";
 
 import {
@@ -19,6 +26,7 @@ import {
   ACCOUNT,
 } from "../vocabulary.js";
 import {
+  AS_MEMBER,
   GITHUB_ERRORS,
   graphql,
   needs,
@@ -27,8 +35,6 @@ import {
   NEEDS_PROJECT,
   NEEDS_REPO,
   PAGE,
-  PUBLIC_READ,
-  PUBLIC_WRITE,
   REPO_VARIABLES,
 } from "./support.js";
 
@@ -44,7 +50,7 @@ export const listProjects = defineEndpoint({
     "Les tableaux Projects du compte de l'installation."
   ),
   group: "projects",
-  ...PUBLIC_READ,
+  ...AS_MEMBER,
   cache_ttl_seconds: 300,
   returns: {
     ids: many(out("string", { label: text("Boards", "Boards", "Tableros", "Tableaux") })),
@@ -62,7 +68,8 @@ export const listProjects = defineEndpoint({
          ... on User { projectsV2(first: $first) { totalCount nodes { id title number url } } }
        }
      }`,
-    `{"login": connections.workspace.owner, "first": ${PAGE}}`
+    `{"login": connections.workspace.owner, "first": ${PAGE}}`,
+    ACCOUNT
   ),
   errors: GITHUB_ERRORS,
   map: `(
@@ -92,7 +99,8 @@ const BOARD_FIELDS = graphql(
        }
      }
    }`,
-  `{"project": params.project_id, "first": ${PAGE}}`
+  `{"project": params.project_id, "first": ${PAGE}}`,
+  ACCOUNT
 );
 
 /** The board's single-select fields as `$fields`, then `answer`, or why the board cannot be read. */
@@ -117,7 +125,7 @@ export const listProjectFields = defineEndpoint({
     "Les champs à choix unique d'un tableau : ses colonnes, et tout autre du même type."
   ),
   group: "projects",
-  ...PUBLIC_READ,
+  ...AS_MEMBER,
   cache_ttl_seconds: 300,
   params: { ...BOARD },
   returns: {
@@ -146,7 +154,7 @@ export const listProjectOptions = defineEndpoint({
     "Ce à quoi un champ à choix unique d'un tableau peut être défini."
   ),
   group: "projects",
-  ...PUBLIC_READ,
+  ...AS_MEMBER,
   cache_ttl_seconds: 300,
   params: { ...BOARD, field: param("string", text("Field", "Feld", "Campo", "Champ"), { options_from: FIELDS_OF }) },
   returns: {
@@ -182,7 +190,7 @@ export const findProjectItem = defineEndpoint({
     "La carte qu'un ticket ou une pull request a sur un tableau."
   ),
   group: "projects",
-  ...PUBLIC_READ,
+  ...AS_MEMBER,
   cache_ttl_seconds: 0,
   params: { ...BOARD, ...REPO, ...NUMBER },
   returns: { item_id: out("string", { label: CARD }), ...REPO_OUT, ...OWNER_OUT, ...NUMBER_OUT, ...UNAVAILABLE },
@@ -197,7 +205,8 @@ export const findProjectItem = defineEndpoint({
          }
        }
      }`,
-    `{${REPO_VARIABLES}, "number": params.number, "first": ${PAGE}}`
+    `{${REPO_VARIABLES}, "number": params.number, "first": ${PAGE}}`,
+    ACCOUNT
   ),
   ...withCodes(needs(NEEDS_REPO, NEEDS_PROJECT, NEEDS_NUMBER), ["not-on-that-board"]),
   map: `(
@@ -212,8 +221,6 @@ export const findProjectItem = defineEndpoint({
   )`,
 });
 
-// A board belongs to an organization or to a repository, and either
-// permission reaches it.
 export const moveProjectItem = defineEndpoint({
   direction: "write",
   label: text("Move a project card", "Projektkarte verschieben", "Mover una tarjeta de proyecto", "Déplacer une carte de projet"),
@@ -224,7 +231,7 @@ export const moveProjectItem = defineEndpoint({
     "Définit un champ à choix unique sur une carte Projects, en tant que le membre."
   ),
   group: "projects",
-  ...PUBLIC_WRITE,
+  ...AS_MEMBER,
   params: {
     ...BOARD,
     item_id: param("string", CARD),

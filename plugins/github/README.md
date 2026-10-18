@@ -23,23 +23,32 @@ There is no service to run beside it.
 Every endpoint, widget and connection, and everything it adds to tasks, is
 named in English, German, Spanish and French.
 
-**Two credentials, two jobs.**
+**Two credentials.**
 
 - **Reads run on the organization's installation**, so a tile answers the same
   for everyone in the community, whether or not they have connected anything.
   They reach exactly the repositories the organization ticked on GitHub's
-  install page, and only to read: Initiative asks GitHub for each of the
-  installation's tokens with read access alone. The re-read that keeps tasks'
-  links current runs there too.
+  install page. The re-read that keeps tasks' links current runs there too.
 - **Writes run on the member's own GitHub account**, so an issue opened by an
   automation is opened by the person whose automation it is, and a branch
-  started from a task by the person who pressed the button. A write never
-  falls back to the plug-in: a member who has not connected is told to.
-  *Waiting on your review* (`review-queue`), *Your review requests*
+  started from a task by the person who pressed the button. A write made as a
+  member never falls back to the plug-in: a member who has not connected is
+  told to. *Waiting on your review* (`review-queue`), *Your review requests*
   (`my-review-requests`) and *Your pull requests* (`my-pull-requests`) also
   run on your own account, because they are about you. The last two name no
   organization, so you see your own in any community with the plug-in,
   whether or not it has connected one.
+- **Or as the organization.** When another plug-in calls a write as the
+  community, such as an automation posting as the organization, it runs on
+  the organization's installation, and GitHub shows the GitHub App as its
+  author. Start a branch and moving a Projects card are always the member's.
+
+Initiative asks GitHub for each of the installation's tokens with read access
+and, for the writes made as the organization, write access to issues and pull
+requests: no installation token can change a repository's contents. The
+organization's project boards are read and moved on the member's own account:
+GitHub opens them to a GitHub App's tokens only with the organization's
+Projects permission, which the installation's tokens are not asked for.
 
 **Initiative runs everything.** Initiative sends people to GitHub, takes them
 back, keeps the organization's installation in the plug-in's configuration and
@@ -55,11 +64,13 @@ branch is public: a plug-in the community has let use GitHub
 (`plugins:beyonders-studio.github`) calls it through Initiative, as the community
 or as one of its members. A read takes either and answers on the organization's
 installation, except the three about a member, the review queue and their own
-review requests and pull requests, which take a member and ask GitHub as them.
-A write takes only a member and runs on that member's own GitHub account,
-so an automation's "comment on the issue" is theirs. Writes are reachable only
-this way. Start a branch names the branch after the task it is run on, so it is
-run from that task alone.
+review requests and pull requests, and the four about project boards, which
+take a member and ask GitHub as them. A write takes either too: made as a
+member, it runs on that member's own GitHub account, so an automation's
+"comment on the issue" is theirs; made as the community, it runs on the
+organization's installation. Moving a Projects card takes a member alone.
+Writes are reachable only this way. Start a branch names the branch after the
+task it is run on, so it is run from that task alone.
 
 **Removing it.** When a member disconnects, leaves or is blocked, or the plug-in is
 removed, Initiative ends the member's GitHub authorization at GitHub (the
@@ -118,8 +129,9 @@ six are set.
    the account the installation is on: an admin of the organization, or the
    user it is installed for. You are sent back to Initiative, connected.
 5. Each member who wants their review queue, their own review requests and pull
-   requests, who starts branches from tasks, or whose automations write to
-   GitHub, connects *Your GitHub account* in the plug-in's settings.
+   requests, who starts branches from tasks or works with project boards, or
+   whose automations write to GitHub as them, connects *Your GitHub account* in
+   the plug-in's settings.
 
 Adding or removing repositories later is done at GitHub, on the GitHub App's
 *Configure* page, and needs nothing here.
@@ -186,12 +198,7 @@ GitHub App on the same organization, each links references by its own prefixes.
    *Check suite* events. A GitHub App made with **Create the GitHub App** needs
    this too: it keeps the permissions it was created with.
 2. Each organization owner accepts the new permissions in GitHub, which asks
-   them when the GitHub App changes. Until they do, GitHub mints Initiative no
-   token for the installation, since each asks to read checks and commit
-   statuses: whatever reads as the organization is refused (its tiles, Link a
-   pull request, the 15-minute re-read, and Change labels, which reads an
-   issue's labels first), so is Start a branch, and GitHub sends no check
-   suites. Its other deliveries still link work to tasks.
+   them when the GitHub App changes.
 3. In each community, a superadmin accepts the update from the plug-in's
    **Update** button: it asks to read projects, where it keeps its links on
    tasks.
