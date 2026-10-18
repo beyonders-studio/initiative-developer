@@ -44,8 +44,7 @@ const PERMISSIONS: Readonly<Record<string, GithubPermissionLevel>> = {
   checks: "read",
   statuses: "read",
   vulnerability_alerts: "read",
-  // The organization's project boards, which a member's own token reads and
-  // moves cards on.
+  // The organization's project boards, read and moved on.
   organization_projects: "write",
   metadata: "read",
 };
@@ -58,10 +57,7 @@ const PERMISSIONS: Readonly<Record<string, GithubPermissionLevel>> = {
  * repository's contents: Start a branch runs on the member's own token.
  *
  * Each is a repository's permission, which an installation on an organization
- * and one on a personal account hold alike, and GitHub mints nothing for a
- * request naming one the installation was not granted. The organization's
- * Projects permission is not asked for: project boards are read and moved on
- * the member's own token.
+ * and one on a personal account hold alike.
  */
 const INSTALLATION_PERMISSIONS: Readonly<Record<string, GithubPermissionLevel>> = {
   issues: "write",
@@ -72,6 +68,25 @@ const INSTALLATION_PERMISSIONS: Readonly<Record<string, GithubPermissionLevel>> 
   vulnerability_alerts: "read",
   metadata: "read",
 };
+
+/**
+ * What an organization's installation tokens may do besides: read its project
+ * boards and move cards on them. An installation on a personal account is asked
+ * for no organization permission, since GitHub mints nothing for a request
+ * naming one the installation does not hold.
+ */
+const ORGANIZATION_PERMISSIONS: Readonly<Record<string, GithubPermissionLevel>> = {
+  organization_projects: "write",
+};
+
+/**
+ * The body each installation token is asked for with: the repository
+ * permissions, and the organization's when the connection's account is one.
+ */
+const INSTALLATION_TOKEN_BODY = `{"permissions": $merge([
+  ${JSON.stringify(INSTALLATION_PERMISSIONS)},
+  connection.owner_type = "Organization" ? ${JSON.stringify(ORGANIZATION_PERMISSIONS)} : {}
+])}`;
 
 /** The webhook events the GitHub App registration subscribes to. */
 const WEBHOOK_EVENTS = ["issues", "pull_request", "release", "create", "delete", "pull_request_review", "check_suite"];
@@ -258,7 +273,7 @@ export default definePlugin({
       token: {
         type: "jwt_bearer",
         exchange_url: `${API}/app/installations/{installation_id}/access_tokens`,
-        exchange_body: { permissions: { ...INSTALLATION_PERMISSIONS } },
+        exchange_body: INSTALLATION_TOKEN_BODY,
         iss: "{vendor.app_id}",
         key: "{vendor.private_key}",
         alg: "RS256",

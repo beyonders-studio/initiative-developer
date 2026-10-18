@@ -46,15 +46,7 @@ const ACTORS = [
 ] as const;
 
 /** The reads made on the member's own account; every other reads on the organization's installation. */
-const ON_ACCOUNT: string[] = [
-  READ.reviewQueue,
-  READ.myReviewRequests,
-  READ.myPullRequests,
-  READ.listProjects,
-  READ.listProjectFields,
-  READ.listProjectOptions,
-  READ.findProjectItem,
-];
+const ON_ACCOUNT: string[] = [READ.reviewQueue, READ.myReviewRequests, READ.myPullRequests];
 
 const variables = (run: { requests: Array<{ body?: unknown }> }) =>
   (run.requests[0].body as { variables: Record<string, unknown> }).variables;
@@ -650,13 +642,14 @@ describe("writes", () => {
     expect(run).toMatchObject({ unavailable: "invalid" });
   });
 
-  it("move-project-item sets the card's field as the member", async () => {
+  it("move-project-item sets the card's field as whoever the call is made as", async () => {
     const params = { project_id: "PVT_1", item_id: "PVTI_7", field_id: "F_1", option_id: "O_2" };
-    const run = await call(WRITE.moveProjectItem, params, "graphql/moved");
-    expect(run.requests).toHaveLength(1);
-    expect(run.requests[0].connection).toBe("account");
-    expect(variables(run)).toEqual({ project: "PVT_1", item: "PVTI_7", field: "F_1", option: "O_2" });
-    expect(run).toMatchObject({ result: { item_id: "PVTI_7" } });
+    for (const [actor, connection] of ACTORS) {
+      const run = await as(actor)(WRITE.moveProjectItem, params, "graphql/moved");
+      expect(run.requests.map((request) => [request.method, request.url, request.connection]), actor).toEqual([["POST", `${API}/graphql`, connection]]);
+      expect(variables(run)).toEqual({ project: "PVT_1", item: "PVTI_7", field: "F_1", option: "O_2" });
+      expect(run).toMatchObject({ result: { item_id: "PVTI_7" } });
+    }
   });
 });
 

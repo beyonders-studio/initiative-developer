@@ -32,10 +32,10 @@ can be made as the organization.
   pull requests that name one of the community's tasks, with each task they
   name.
 - Writes can be made as the organization. When another plug-in calls one as
-  the community, such as an automation posting as the organization, it runs on
-  the organization's installation, and GitHub shows the GitHub App as its
-  author; made as a member, it still runs on their own GitHub account. Start a
-  branch and Move a project card stay the member's alone.
+  the community, such as an automation posting as the organization or moving
+  a project card, it runs on the organization's installation, and GitHub shows
+  the GitHub App as its author; made as a member, it still runs on their own
+  GitHub account. Start a branch stays the member's alone.
 
 ### Changed
 
@@ -47,12 +47,10 @@ can be made as the organization.
 - Initiative asks GitHub for the organization's installation tokens with read
   access and, for the writes made as the organization, write access to issues
   and pull requests, where they carried all of the GitHub App's permissions.
-  No installation token can change a repository's contents.
-- `list-projects`, `list-project-fields`, `list-project-options` and
-  `find-project-item` take a member alone and read on their own GitHub
-  account, as `move-project-item` already did, where they read on the
-  organization's installation: its tokens are not asked for the
-  organization's Projects permission.
+  No installation token can change a repository's contents. An organization's
+  installation tokens are also asked for its Projects permission, for reading
+  its project boards and moving cards; an installation on a personal account
+  is asked for no organization permission.
 
 ### Upgrading
 
@@ -68,9 +66,9 @@ can be made as the organization.
   **Update** button, letting it read projects.
 - Needs an Initiative serving the plug-in API that keeps a declarative
   plug-in's lists, settings, actions and schedules, resolves a request's
-  connection by the call's actor, and narrows the tokens it mints; the
-  manifest's `min_plugin_api` names it, and an older Initiative refuses to
-  install it.
+  connection by the call's actor, and narrows the tokens it mints by the
+  account each installation is on; the manifest's `min_plugin_api` names it,
+  and an older Initiative refuses to install it.
 
 ## [6.0.0]
 

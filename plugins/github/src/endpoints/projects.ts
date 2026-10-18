@@ -1,8 +1,7 @@
 /**
- * The organization's Projects boards. Every call here runs on the member's own
- * GitHub account: a GitHub App's tokens reach an organization's boards only
- * with the organization's Projects permission, which the installation's tokens
- * are not asked for, and no GitHub App's tokens reach a personal account's.
+ * The organization's Projects boards, read on its installation. A card is
+ * moved as whoever the call is made as: the member on their own GitHub account,
+ * or the organization on its installation.
  */
 
 import { defineEndpoint } from "initiative-plugin-sdk/manifest";
@@ -23,10 +22,8 @@ import {
   text,
   TOTAL_OUT,
   UNAVAILABLE,
-  ACCOUNT,
 } from "../vocabulary.js";
 import {
-  AS_MEMBER,
   GITHUB_ERRORS,
   graphql,
   needs,
@@ -35,6 +32,9 @@ import {
   NEEDS_PROJECT,
   NEEDS_REPO,
   PAGE,
+  PER_ACTOR,
+  PUBLIC_READ,
+  PUBLIC_WRITE,
   REPO_VARIABLES,
 } from "./support.js";
 
@@ -50,7 +50,7 @@ export const listProjects = defineEndpoint({
     "Les tableaux Projects du compte de l'installation."
   ),
   group: "projects",
-  ...AS_MEMBER,
+  ...PUBLIC_READ,
   cache_ttl_seconds: 300,
   returns: {
     ids: many(out("string", { label: text("Boards", "Boards", "Tableros", "Tableaux") })),
@@ -68,8 +68,7 @@ export const listProjects = defineEndpoint({
          ... on User { projectsV2(first: $first) { totalCount nodes { id title number url } } }
        }
      }`,
-    `{"login": connections.workspace.owner, "first": ${PAGE}}`,
-    ACCOUNT
+    `{"login": connections.workspace.owner, "first": ${PAGE}}`
   ),
   errors: GITHUB_ERRORS,
   map: `(
@@ -99,8 +98,7 @@ const BOARD_FIELDS = graphql(
        }
      }
    }`,
-  `{"project": params.project_id, "first": ${PAGE}}`,
-  ACCOUNT
+  `{"project": params.project_id, "first": ${PAGE}}`
 );
 
 /** The board's single-select fields as `$fields`, then `answer`, or why the board cannot be read. */
@@ -125,7 +123,7 @@ export const listProjectFields = defineEndpoint({
     "Les champs à choix unique d'un tableau : ses colonnes, et tout autre du même type."
   ),
   group: "projects",
-  ...AS_MEMBER,
+  ...PUBLIC_READ,
   cache_ttl_seconds: 300,
   params: { ...BOARD },
   returns: {
@@ -154,7 +152,7 @@ export const listProjectOptions = defineEndpoint({
     "Ce à quoi un champ à choix unique d'un tableau peut être défini."
   ),
   group: "projects",
-  ...AS_MEMBER,
+  ...PUBLIC_READ,
   cache_ttl_seconds: 300,
   params: { ...BOARD, field: param("string", text("Field", "Feld", "Campo", "Champ"), { options_from: FIELDS_OF }) },
   returns: {
@@ -190,7 +188,7 @@ export const findProjectItem = defineEndpoint({
     "La carte qu'un ticket ou une pull request a sur un tableau."
   ),
   group: "projects",
-  ...AS_MEMBER,
+  ...PUBLIC_READ,
   cache_ttl_seconds: 0,
   params: { ...BOARD, ...REPO, ...NUMBER },
   returns: { item_id: out("string", { label: CARD }), ...REPO_OUT, ...OWNER_OUT, ...NUMBER_OUT, ...UNAVAILABLE },
@@ -205,8 +203,7 @@ export const findProjectItem = defineEndpoint({
          }
        }
      }`,
-    `{${REPO_VARIABLES}, "number": params.number, "first": ${PAGE}}`,
-    ACCOUNT
+    `{${REPO_VARIABLES}, "number": params.number, "first": ${PAGE}}`
   ),
   ...withCodes(needs(NEEDS_REPO, NEEDS_PROJECT, NEEDS_NUMBER), ["not-on-that-board"]),
   map: `(
@@ -225,13 +222,13 @@ export const moveProjectItem = defineEndpoint({
   direction: "write",
   label: text("Move a project card", "Projektkarte verschieben", "Mover una tarjeta de proyecto", "Déplacer une carte de projet"),
   description: text(
-    "Sets one single-select field on a Projects card, as the member.",
-    "Setzt ein Einfachauswahl-Feld auf einer Projects-Karte, als das Mitglied.",
-    "Establece un campo de selección única en una tarjeta de Projects, como el miembro.",
-    "Définit un champ à choix unique sur une carte Projects, en tant que le membre."
+    "Sets one single-select field on a Projects card, as the member or as the organization.",
+    "Setzt ein Einfachauswahl-Feld auf einer Projects-Karte, als das Mitglied oder als die Organisation.",
+    "Establece un campo de selección única en una tarjeta de Projects, como el miembro o como la organización.",
+    "Définit un champ à choix unique sur une carte Projects, en tant que le membre ou l'organisation."
   ),
   group: "projects",
-  ...AS_MEMBER,
+  ...PUBLIC_WRITE,
   params: {
     ...BOARD,
     item_id: param("string", CARD),
@@ -255,7 +252,7 @@ export const moveProjectItem = defineEndpoint({
        }) { projectV2Item { id } }
      }`,
     `{"project": params.project_id, "item": params.item_id, "field": params.field_id, "option": params.option_id}`,
-    ACCOUNT
+    PER_ACTOR
   ),
   errors: GITHUB_ERRORS,
   map: `(

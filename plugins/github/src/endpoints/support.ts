@@ -45,8 +45,12 @@ export function rest(
   return { method, url: `${quote(API)} & ${path}`, headers: HEADERS, ...(connection ? { connection } : {}), ...more };
 }
 
-/** One GraphQL query or mutation, its variables an expression answering an object. */
-export function graphql(query: string, variables: Expression, connection: string = WORKSPACE): VendorRequest {
+/**
+ * One GraphQL query or mutation, its variables an expression answering an
+ * object. It runs on the organization's installation unless it names another
+ * connection, or one for each actor ({@link PER_ACTOR}).
+ */
+export function graphql(query: string, variables: Expression, connection: NonNullable<VendorRequest["connection"]> = WORKSPACE): VendorRequest {
   return {
     method: "POST",
     url: quote(`${API}/graphql`),

@@ -8,8 +8,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { validateManifest, type Manifest, type PartNode, type VendorRequest } from "initiative-plugin-sdk/manifest";
+import { runExchangeBody } from "initiative-plugin-sdk/testing";
 import { describe, expect, it } from "vitest";
 
+import plugin from "../src/plugin.js";
 import { ACCOUNT, declare, LISTING_UID, READ, READ_IDS, WORKSPACE, WRITE } from "../src/vocabulary.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -54,15 +56,8 @@ const requestsOf = (endpoint: Endpoint): VendorRequest[] =>
 /** Whether a request only reads: a GET, or a GraphQL query. */
 const reads = (request: VendorRequest) => request.method === "GET" || Boolean(request.graphql?.query.startsWith("query "));
 
-/** What runs on the member's own GitHub account alone: Start a branch, and the organization's project boards. */
-const MEMBERS_ALONE = [
-  WRITE.startBranch,
-  WRITE.moveProjectItem,
-  READ.listProjects,
-  READ.listProjectFields,
-  READ.listProjectOptions,
-  READ.findProjectItem,
-].map(declare);
+/** What runs on the member's own GitHub account alone: Start a branch. */
+const MEMBERS_ALONE = [WRITE.startBranch].map(declare);
 
 /** The words a part's tree draws: its sections' titles and its texts. */
 const words = (node: PartNode): unknown[] => [
@@ -110,7 +105,7 @@ describe("manifest", () => {
     const terms = ({ id, direction, params, returns, public: open, actors, identity }: Endpoint) =>
       ({ id, direction, params, returns, public: open, actors, identity });
     // Who may call each is pinned below: a write now takes the community as
-    // well as a member, and a project board is read as a member.
+    // well as a member.
     const shape = ({ actors, ...rest }: ReturnType<typeof terms>) => rest;
     const before = unprefixed(service.endpoints!.map(terms));
     const after = unprefixed(manifest.endpoints!.map(terms));
@@ -174,7 +169,8 @@ describe("manifest", () => {
 
   it("makes every other write as a member on their own account, or as the community on the organization's installation", () => {
     const writes = (manifest.endpoints ?? []).filter((one) => one.direction === "write" && !MEMBERS_ALONE.includes(one.id));
-    expect(writes).toHaveLength(6);
+    expect(writes.map((one) => one.id)).toContain(declare(WRITE.moveProjectItem));
+    expect(writes).toHaveLength(7);
     for (const endpoint of writes) {
       expect(endpoint.actors, endpoint.id).toEqual(["member", "installation"]);
       // A call made as the member requires their account by the connection it carries.
@@ -189,7 +185,7 @@ describe("manifest", () => {
     }
   });
 
-  it("runs Start a branch and the organization's project boards as the member alone, on their own account", () => {
+  it("runs Start a branch as the member alone, on their own account", () => {
     for (const id of MEMBERS_ALONE) {
       const endpoint = manifest.endpoints!.find((one) => one.id === id)!;
       expect(endpoint, id).toMatchObject({ actors: ["member"], requires: { all_of: [WORKSPACE, ACCOUNT] } });
@@ -198,7 +194,7 @@ describe("manifest", () => {
   });
 
   it("offers every read and write to other plug-ins but the task's own Start a branch, and no announcement", () => {
-    // A member's own reads, and the organization's project boards, take a member.
+    // A member's own reads take a member; every other read either, on the organization.
     const members = [READ_IDS.reviewQueue, READ_IDS.myReviewRequests, READ_IDS.myPullRequests, ...MEMBERS_ALONE];
     for (const endpoint of manifest.endpoints ?? []) {
       // Start a branch names the branch after the task its action runs on.
@@ -227,8 +223,10 @@ describe("manifest", () => {
     }
   });
 
-  it("reads on the organization's installation, or writes issues and pull requests, which its tokens are asked for alone", () => {
-    const permissions = connection(WORKSPACE).token!.exchange_body!.permissions as Record<string, string>;
+  it("reads on the organization's installation, or writes issues, pull requests and project cards, which its tokens are asked for alone", async () => {
+    /** What an installation token is asked for, on an account of GitHub's `type`. */
+    const asked = async (owner_type: string) =>
+      (await runExchangeBody(plugin, WORKSPACE, { fields: { owner: "acme", installation_id: 42, owner_type } })).permissions as Record<string, string>;
     // What an installation token carries: the organization's connection, and
     // a write's made as the community.
     const installation = (manifest.endpoints ?? [])
@@ -238,17 +236,31 @@ describe("manifest", () => {
     expect(writes.length).toBeGreaterThan(0);
     expect(installation.length).toBeGreaterThan(writes.length);
     // What GitHub asks of each: a review request, pull requests; the issues
-    // API, which also serves a pull request's comments, state and labels, issues.
+    // API, which also serves a pull request's comments, state and labels,
+    // issues; a card's field, the organization's projects.
     const needs = (request: VendorRequest) =>
-      request.url.includes('"/requested_reviewers"') ? "pull_requests" : request.url.includes('"/issues') ? "issues" : undefined;
-    for (const request of writes) {
-      expect(request.graphql, request.url).toBeUndefined();
-      expect(needs(request), request.url).toBeDefined();
-    }
-    // The tokens write those alone, and never a repository's contents.
-    const written = Object.keys(permissions).filter((key) => permissions[key] !== "read");
+      request.graphql?.query.includes("updateProjectV2ItemFieldValue")
+        ? "organization_projects"
+        : request.graphql
+          ? undefined
+          : request.url.includes('"/requested_reviewers"')
+            ? "pull_requests"
+            : request.url.includes('"/issues')
+              ? "issues"
+              : undefined;
+    for (const request of writes) expect(needs(request), request.url).toBeDefined();
+    // An organization's tokens write those alone, and never a repository's contents.
+    const organization = await asked("Organization");
+    const written = Object.keys(organization).filter((key) => organization[key] !== "read");
     expect(written.sort()).toEqual([...new Set(writes.map(needs))].sort());
-    expect(permissions.contents).toBe("read");
+    // A personal account's are asked for no organization permission, which
+    // its installation cannot hold.
+    const personal = await asked("User");
+    const { organization_projects, ...repository } = organization;
+    expect(organization_projects).toBe("write");
+    expect(personal).toEqual(repository);
+    expect(Object.keys(personal).filter((key) => key.startsWith("organization_"))).toEqual([]);
+    for (const permissions of [organization, personal]) expect(permissions.contents).toBe("read");
     for (const request of installation) expect(request.url, request.url).not.toMatch(/\/git\/|\/contents/);
   });
 
@@ -287,23 +299,12 @@ describe("manifest", () => {
       after_connect: { code: "installation-not-held" },
     });
     expect(workspace.flow!.revoke).toBeUndefined();
-    // Every installation token is asked for reading, and for writing the
-    // issues and pull requests a write made as the community changes: never a
-    // repository's contents, and only a repository's permissions.
+    // What each installation token is asked for depends on the account it is
+    // on, so its body is an expression (see the test above).
     expect(workspace.token).toEqual({
       type: "jwt_bearer",
       exchange_url: "https://api.github.com/app/installations/{installation_id}/access_tokens",
-      exchange_body: {
-        permissions: {
-          issues: "write",
-          pull_requests: "write",
-          contents: "read",
-          checks: "read",
-          statuses: "read",
-          vulnerability_alerts: "read",
-          metadata: "read",
-        },
-      },
+      exchange_body: expect.stringContaining("connection.owner_type"),
       iss: "{vendor.app_id}",
       key: "{vendor.private_key}",
       alg: "RS256",

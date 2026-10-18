@@ -41,14 +41,15 @@ named in English, German, Spanish and French.
 - **Or as the organization.** When another plug-in calls a write as the
   community, such as an automation posting as the organization, it runs on
   the organization's installation, and GitHub shows the GitHub App as its
-  author. Start a branch and moving a Projects card are always the member's.
+  author. Start a branch is always the member's.
 
 Initiative asks GitHub for each of the installation's tokens with read access
 and, for the writes made as the organization, write access to issues and pull
-requests: no installation token can change a repository's contents. The
-organization's project boards are read and moved on the member's own account:
-GitHub opens them to a GitHub App's tokens only with the organization's
-Projects permission, which the installation's tokens are not asked for.
+requests: no installation token can change a repository's contents. An
+organization's installation tokens are also asked for its Projects permission,
+so its project boards are read, and cards moved, as the organization. An
+installation on a personal account is asked for no organization permission,
+which it cannot hold.
 
 **Initiative runs everything.** Initiative sends people to GitHub, takes them
 back, keeps the organization's installation in the plug-in's configuration and
@@ -64,13 +65,12 @@ branch is public: a plug-in the community has let use GitHub
 (`plugins:beyonders-studio.github`) calls it through Initiative, as the community
 or as one of its members. A read takes either and answers on the organization's
 installation, except the three about a member, the review queue and their own
-review requests and pull requests, and the four about project boards, which
-take a member and ask GitHub as them. A write takes either too: made as a
-member, it runs on that member's own GitHub account, so an automation's
-"comment on the issue" is theirs; made as the community, it runs on the
-organization's installation. Moving a Projects card takes a member alone.
-Writes are reachable only this way. Start a branch names the branch after the
-task it is run on, so it is run from that task alone.
+review requests and pull requests, which take a member and ask GitHub as them.
+A write takes either too: made as a member, it runs on that member's own GitHub
+account, so an automation's "comment on the issue" is theirs; made as the
+community, it runs on the organization's installation. Writes are reachable
+only this way. Start a branch names the branch after the task it is run on, so
+it is run from that task alone.
 
 **Removing it.** When a member disconnects, leaves or is blocked, or the plug-in is
 removed, Initiative ends the member's GitHub authorization at GitHub (the
@@ -129,9 +129,8 @@ six are set.
    the account the installation is on: an admin of the organization, or the
    user it is installed for. You are sent back to Initiative, connected.
 5. Each member who wants their review queue, their own review requests and pull
-   requests, who starts branches from tasks or works with project boards, or
-   whose automations write to GitHub as them, connects *Your GitHub account* in
-   the plug-in's settings.
+   requests, who starts branches from tasks, or whose automations write to
+   GitHub as them, connects *Your GitHub account* in the plug-in's settings.
 
 Adding or removing repositories later is done at GitHub, on the GitHub App's
 *Configure* page, and needs nothing here.
