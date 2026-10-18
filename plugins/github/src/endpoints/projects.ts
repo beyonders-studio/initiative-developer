@@ -1,3 +1,9 @@
+/**
+ * The organization's Projects boards, read on its installation. A card is
+ * moved as whoever the call is made as: the member on their own GitHub account,
+ * or the organization on its installation.
+ */
+
 import { defineEndpoint } from "initiative-plugin-sdk/manifest";
 
 import {
@@ -16,7 +22,6 @@ import {
   text,
   TOTAL_OUT,
   UNAVAILABLE,
-  ACCOUNT,
 } from "../vocabulary.js";
 import {
   GITHUB_ERRORS,
@@ -27,6 +32,7 @@ import {
   NEEDS_PROJECT,
   NEEDS_REPO,
   PAGE,
+  PER_ACTOR,
   PUBLIC_READ,
   PUBLIC_WRITE,
   REPO_VARIABLES,
@@ -212,16 +218,14 @@ export const findProjectItem = defineEndpoint({
   )`,
 });
 
-// A board belongs to an organization or to a repository, and either
-// permission reaches it.
 export const moveProjectItem = defineEndpoint({
   direction: "write",
   label: text("Move a project card", "Projektkarte verschieben", "Mover una tarjeta de proyecto", "Déplacer une carte de projet"),
   description: text(
-    "Sets one single-select field on a Projects card, as the member.",
-    "Setzt ein Einfachauswahl-Feld auf einer Projects-Karte, als das Mitglied.",
-    "Establece un campo de selección única en una tarjeta de Projects, como el miembro.",
-    "Définit un champ à choix unique sur une carte Projects, en tant que le membre."
+    "Sets one single-select field on a Projects card, as the member or as the organization.",
+    "Setzt ein Einfachauswahl-Feld auf einer Projects-Karte, als das Mitglied oder als die Organisation.",
+    "Establece un campo de selección única en una tarjeta de Projects, como el miembro o como la organización.",
+    "Définit un champ à choix unique sur une carte Projects, en tant que le membre ou l'organisation."
   ),
   group: "projects",
   ...PUBLIC_WRITE,
@@ -248,7 +252,7 @@ export const moveProjectItem = defineEndpoint({
        }) { projectV2Item { id } }
      }`,
     `{"project": params.project_id, "item": params.item_id, "field": params.field_id, "option": params.option_id}`,
-    ACCOUNT
+    PER_ACTOR
   ),
   errors: GITHUB_ERRORS,
   map: `(

@@ -13,7 +13,7 @@
  * widget can say why. A write is refused with the code.
  */
 
-import type { Endpoint, ErrorRule, Expression, Paging, VendorRequest } from "initiative-plugin-sdk/manifest";
+import type { ActorConnections, Endpoint, ErrorRule, Expression, Paging, VendorRequest } from "initiative-plugin-sdk/manifest";
 
 import { ACCOUNT, WORKSPACE } from "../vocabulary.js";
 
@@ -33,20 +33,24 @@ const HEADERS: Record<string, Expression> = {
 /**
  * One REST call. `path` is an expression for the address after the API's
  * base. It runs on the organization's installation unless it names another
- * connection, or null for a connection's own check, which runs on that
- * connection.
+ * connection, or one for each actor ({@link PER_ACTOR}), or null for a
+ * connection's own check, which runs on that connection.
  */
 export function rest(
   method: VendorRequest["method"],
   path: Expression,
-  extra: { connection?: string | null; body?: Expression; query?: Record<string, Expression>; paging?: Paging } = {}
+  extra: { connection?: VendorRequest["connection"] | null; body?: Expression; query?: Record<string, Expression>; paging?: Paging } = {}
 ): VendorRequest {
   const { connection = WORKSPACE, ...more } = extra;
   return { method, url: `${quote(API)} & ${path}`, headers: HEADERS, ...(connection ? { connection } : {}), ...more };
 }
 
-/** One GraphQL query or mutation, its variables an expression answering an object. */
-export function graphql(query: string, variables: Expression, connection: string = WORKSPACE): VendorRequest {
+/**
+ * One GraphQL query or mutation, its variables an expression answering an
+ * object. It runs on the organization's installation unless it names another
+ * connection, or one for each actor ({@link PER_ACTOR}).
+ */
+export function graphql(query: string, variables: Expression, connection: NonNullable<VendorRequest["connection"]> = WORKSPACE): VendorRequest {
   return {
     method: "POST",
     url: quote(`${API}/graphql`),
@@ -86,14 +90,44 @@ export const PUBLIC_READ = {
 } satisfies Pick<Endpoint, "public" | "actors" | "requires">;
 
 /**
- * A write other plug-ins may call through Initiative, as one of the community's
- * members only: it runs on that member's own GitHub account.
+ * A read about one member, which other plug-ins may call as that member. It
+ * runs on their own GitHub account alone and names no organization, so a
+ * community offers it whether or not it has connected one.
  */
-export const PUBLIC_WRITE = {
+export const PERSONAL_READ = {
+  public: true,
+  actors: ["member"],
+  requires: { all_of: [ACCOUNT] },
+} satisfies Pick<Endpoint, "public" | "actors" | "requires">;
+
+/**
+ * A call about the organization that other plug-ins may make through
+ * Initiative as one of the community's members alone: it runs on that member's
+ * own GitHub account.
+ */
+export const AS_MEMBER = {
   public: true,
   actors: ["member"],
   requires: { all_of: [WORKSPACE, ACCOUNT] },
 } satisfies Pick<Endpoint, "public" | "actors" | "requires">;
+
+/**
+ * A write other plug-ins may call through Initiative, as one of the community's
+ * members or as the community. Made as a member it runs on their own GitHub
+ * account, and as the community on the organization's installation: each
+ * request that writes names {@link PER_ACTOR}.
+ */
+export const PUBLIC_WRITE = {
+  public: true,
+  actors: ["member", "installation"],
+  requires: { all_of: [WORKSPACE] },
+} satisfies Pick<Endpoint, "public" | "actors" | "requires">;
+
+/**
+ * The connection a write's request carries for whoever the call is made as:
+ * the member's own GitHub account, or the organization's installation.
+ */
+export const PER_ACTOR: ActorConnections = { member: ACCOUNT, installation: WORKSPACE };
 
 // --- what GitHub's answers mean ----------------------------------------------
 

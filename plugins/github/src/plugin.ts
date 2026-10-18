@@ -13,7 +13,16 @@ import { definePlugin, type ConnectionFlow, type GithubPermissionLevel, type Pag
 import { EMIT_ENDPOINTS, EVENTS } from "./endpoints/emissions.js";
 import { closeIssue, comment, findIssues, getIssue, label, listLabels, listMilestones, openIssue, reopenIssue } from "./endpoints/issues.js";
 import { findProjectItem, listProjectFields, listProjectOptions, listProjects, moveProjectItem } from "./endpoints/projects.js";
-import { findPullRequests, getPullRequest, recentlyUpdated, requestReview, reviewQueue } from "./endpoints/pulls.js";
+import {
+  findPullRequests,
+  getPullRequest,
+  linkedWork,
+  myPullRequests,
+  myReviewRequests,
+  recentlyUpdated,
+  requestReview,
+  reviewQueue,
+} from "./endpoints/pulls.js";
 import { listAssignees, listBranches, listRepositories, startBranch } from "./endpoints/repositories.js";
 import { listAlerts } from "./endpoints/security.js";
 import { API, quote, rest, WEB } from "./endpoints/support.js";
@@ -35,9 +44,49 @@ const PERMISSIONS: Readonly<Record<string, GithubPermissionLevel>> = {
   checks: "read",
   statuses: "read",
   vulnerability_alerts: "read",
+  // The organization's project boards, read and moved on.
   organization_projects: "write",
   metadata: "read",
 };
+
+/**
+ * What each token Initiative mints for the organization's installation may do,
+ * asked of GitHub every time: read, and write the issues and pull requests a
+ * write made as the organization changes. GitHub's issues API serves a pull
+ * request's comments, state and labels too. No installation token writes a
+ * repository's contents: Start a branch runs on the member's own token.
+ *
+ * Each is a repository's permission, which an installation on an organization
+ * and one on a personal account hold alike.
+ */
+const INSTALLATION_PERMISSIONS: Readonly<Record<string, GithubPermissionLevel>> = {
+  issues: "write",
+  pull_requests: "write",
+  contents: "read",
+  checks: "read",
+  statuses: "read",
+  vulnerability_alerts: "read",
+  metadata: "read",
+};
+
+/**
+ * What an organization's installation tokens may do besides: read its project
+ * boards and move cards on them. An installation on a personal account is asked
+ * for no organization permission, since GitHub mints nothing for a request
+ * naming one the installation does not hold.
+ */
+const ORGANIZATION_PERMISSIONS: Readonly<Record<string, GithubPermissionLevel>> = {
+  organization_projects: "write",
+};
+
+/**
+ * The body each installation token is asked for with: the repository
+ * permissions, and the organization's when the connection's account is one.
+ */
+const INSTALLATION_TOKEN_BODY = `{"permissions": $merge([
+  ${JSON.stringify(INSTALLATION_PERMISSIONS)},
+  connection.owner_type = "Organization" ? ${JSON.stringify(ORGANIZATION_PERMISSIONS)} : {}
+])}`;
 
 /** The webhook events the GitHub App registration subscribes to. */
 const WEBHOOK_EVENTS = ["issues", "pull_request", "release", "create", "delete", "pull_request_review", "check_suite"];
@@ -224,6 +273,7 @@ export default definePlugin({
       token: {
         type: "jwt_bearer",
         exchange_url: `${API}/app/installations/{installation_id}/access_tokens`,
+        exchange_body: INSTALLATION_TOKEN_BODY,
         iss: "{vendor.app_id}",
         key: "{vendor.private_key}",
         alg: "RS256",
@@ -301,6 +351,9 @@ export default definePlugin({
     [READ.listProjectOptions]: listProjectOptions,
     [READ.findProjectItem]: findProjectItem,
     [READ.recentlyUpdated]: recentlyUpdated,
+    [READ.linkedWork]: linkedWork,
+    [READ.myReviewRequests]: myReviewRequests,
+    [READ.myPullRequests]: myPullRequests,
     [WRITE.openIssue]: openIssue,
     [WRITE.comment]: comment,
     [WRITE.closeIssue]: closeIssue,
@@ -319,8 +372,9 @@ export default definePlugin({
   actions: ACTIONS,
   help: HELP,
 
-  // The four dashboard tiles. Each module runs in Initiative's sandbox with
-  // one data source, the endpoint its tile is bound to, and returns a scene.
+  // The dashboard tiles. Each module runs in Initiative's sandbox with one
+  // data source, the endpoint its tile is bound to, and returns a scene. A
+  // member's own tiles need only their own GitHub account.
   widgets: {
     "open-issues": {
       meta: {
@@ -361,6 +415,77 @@ export default definePlugin({
         },
       },
       requires: { all_of: [WORKSPACE, ACCOUNT] },
+    },
+    "my-review-requests": {
+      meta: {
+        name: { en: "Your review requests", de: "Deine Review-Anfragen", es: "Tus solicitudes de revisión", fr: "Vos demandes de revue" },
+        description: {
+          en: "Open pull requests that asked for your review, across repositories, from your own GitHub account.",
+          de: "Offene Pull Requests, die deine Review angefragt haben, über Repositories hinweg, aus deinem eigenen GitHub-Konto.",
+          es: "Pull requests abiertas que pidieron tu revisión, en todos los repositorios, desde tu propia cuenta de GitHub.",
+          fr: "Pull requests ouvertes qui ont demandé votre revue, dans tous les dépôts, depuis votre propre compte GitHub.",
+        },
+      },
+      endpoints: [READ.myReviewRequests],
+      module: "src/widgets/my-review-requests.ts",
+      sample_data: {
+        [READ.myReviewRequests]: {
+          numbers: [812, 57],
+          titles: ["Cache the issue counts", "Retry a webhook delivery"],
+          urls: ["https://github.com/acme/widgets/pull/812", "https://github.com/acme/gadgets/pull/57"],
+          count: 2,
+          total: 2,
+        },
+      },
+      requires: { all_of: [ACCOUNT] },
+    },
+    "my-pull-requests": {
+      meta: {
+        name: { en: "Your pull requests", de: "Deine Pull Requests", es: "Tus pull requests", fr: "Vos pull requests" },
+        description: {
+          en: "Your open pull requests, across repositories, from your own GitHub account.",
+          de: "Deine offenen Pull Requests, über Repositories hinweg, aus deinem eigenen GitHub-Konto.",
+          es: "Tus pull requests abiertas, en todos los repositorios, desde tu propia cuenta de GitHub.",
+          fr: "Vos pull requests ouvertes, dans tous les dépôts, depuis votre propre compte GitHub.",
+        },
+      },
+      endpoints: [READ.myPullRequests],
+      module: "src/widgets/my-pull-requests.ts",
+      sample_data: {
+        [READ.myPullRequests]: {
+          numbers: [815],
+          titles: ["Draw the review load"],
+          urls: ["https://github.com/acme/widgets/pull/815"],
+          count: 1,
+          total: 1,
+        },
+      },
+      requires: { all_of: [ACCOUNT] },
+    },
+    "linked-pull-requests": {
+      meta: {
+        name: { en: "Linked pull requests", de: "Verknüpfte Pull Requests", es: "Pull requests vinculadas", fr: "Pull requests liées" },
+        description: {
+          en: "The organization's open pull requests that name a task, with the task each names.",
+          de: "Die offenen Pull Requests der Organisation, die eine Aufgabe nennen, mit der Aufgabe, die jeder nennt.",
+          es: "Las pull requests abiertas de la organización que nombran una tarea, con la tarea que nombra cada una.",
+          fr: "Les pull requests ouvertes de l'organisation qui nomment une tâche, avec la tâche que chacune nomme.",
+        },
+      },
+      endpoints: [READ.linkedWork],
+      module: "src/widgets/linked-pull-requests.ts",
+      sample_data: {
+        [READ.linkedWork]: {
+          tasks: [42, 57],
+          references: ["acme-42", "acme-57"],
+          repositories: ["acme/widgets", "acme/gadgets"],
+          numbers: [812, 77],
+          titles: ["Fix sign-in on the mobile app", "Cache the issue counts"],
+          urls: ["#", "#"],
+          count: 2,
+        },
+      },
+      requires: { all_of: [WORKSPACE] },
     },
     "dependabot-alerts": {
       meta: {
@@ -470,9 +595,9 @@ export default definePlugin({
       "",
       "An admin connects the organization once, on GitHub's own install page, and picks the repositories the plug-in may see. Dashboards then show open issues, pull requests waiting on review, Dependabot alerts and a fortnight of throughput for everyone, with nobody pasting a token.",
       "",
-      "Members who connect their own GitHub account get their own review queue, and automations can open, comment on, close, label and move issues as them.",
+      "Members who connect their own GitHub account get their own review queue, and automations can open, comment on, close, label and move issues as them. Their own review requests and pull requests show in any community with the plug-in, whether or not it has connected an organization.",
       "",
-      "Tasks link to the branches and pull requests that name them, such as acme-42, and show whether each is open, reviewed and passing its checks. A task can start its own branch in GitHub.",
+      "Tasks link to the branches and pull requests that name them, such as acme-42, and show whether each is open, reviewed and passing its checks. A task can start its own branch in GitHub, and a dashboard can list the open pull requests that name a task.",
     ].join("\n"),
     avatar: "assets/avatar.png",
     version: "6.0.0",

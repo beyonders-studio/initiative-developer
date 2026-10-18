@@ -4,6 +4,7 @@
  * included; and the actions and the schedule that keep a task's links.
  */
 
+import type { ActorKind } from "initiative-plugin-sdk/manifest";
 import { runAction, runEndpoint, runSchedule, type RecordedResponse } from "initiative-plugin-sdk/testing";
 import { describe, expect, it } from "vitest";
 
@@ -20,15 +21,32 @@ const HEADERS = {
   "User-Agent": "initiative-github",
 };
 
-/** One endpoint, called with `params`, answered in turn by each recorded body or answer. */
-function call(name: string, params: Record<string, unknown>, ...answers: Array<string | RecordedResponse>) {
-  return runEndpoint(plugin, name, {
-    params,
-    connections: CONNECTIONS,
-    now: NOW,
-    responses: answers.map((answer) => (typeof answer === "string" ? { body: recorded(answer) } : answer)),
-  });
-}
+/** The install's prefix, `acme`, and the one it had before, `old`. */
+const INSTALL = { settings: { task_prefix: "acme" }, aliases: { task_prefix: ["old"] } };
+
+/** One endpoint, called as `actor` (by default its first) with `params`, answered in turn by each recorded body or answer. */
+const as =
+  (actor?: ActorKind) =>
+  (name: string, params: Record<string, unknown>, ...answers: Array<string | RecordedResponse>) =>
+    runEndpoint(plugin, name, {
+      params,
+      connections: CONNECTIONS,
+      ...INSTALL,
+      now: NOW,
+      actor,
+      responses: answers.map((answer) => (typeof answer === "string" ? { body: recorded(answer) } : answer)),
+    });
+
+const call = as();
+
+/** Who a write is made as, and the connection whose credential it then carries. */
+const ACTORS = [
+  ["member", "account"],
+  ["installation", "workspace"],
+] as const;
+
+/** The reads made on the member's own account; every other reads on the organization's installation. */
+const ON_ACCOUNT: string[] = [READ.reviewQueue, READ.myReviewRequests, READ.myPullRequests];
 
 const variables = (run: { requests: Array<{ body?: unknown }> }) =>
   (run.requests[0].body as { variables: Record<string, unknown> }).variables;
@@ -47,6 +65,9 @@ const ROW = {
   updated_at: ["2026-09-02T00:00:00Z"],
   closed_at: [""],
 };
+
+/** The pull request GitHub's recorded search answers, as every search for pull requests answers it. */
+const PULL_ROW = { ...ROW, numbers: [9], titles: ["Fix the build"], urls: ["https://github.com/acme/widgets/pull/9"], count: 1, total: 1 };
 
 const READS: ReadCase[] = [
   {
@@ -148,18 +169,10 @@ const READS: ReadCase[] = [
       checks: "passing",
     },
   },
-  {
-    name: READ.findPullRequests,
-    params: { repo: "widgets" },
-    answers: ["graphql/search"],
-    result: { ...ROW, numbers: [9], titles: ["Fix the build"], urls: ["https://github.com/acme/widgets/pull/9"], count: 1, total: 1 },
-  },
-  {
-    name: READ.reviewQueue,
-    params: { repo: "widgets" },
-    answers: ["graphql/search"],
-    result: { ...ROW, numbers: [9], titles: ["Fix the build"], urls: ["https://github.com/acme/widgets/pull/9"], count: 1, total: 1 },
-  },
+  { name: READ.findPullRequests, params: { repo: "widgets" }, answers: ["graphql/search"], result: PULL_ROW },
+  { name: READ.reviewQueue, params: { repo: "widgets" }, answers: ["graphql/search"], result: PULL_ROW },
+  { name: READ.myReviewRequests, params: {}, answers: ["graphql/search"], result: PULL_ROW },
+  { name: READ.myPullRequests, params: {}, answers: ["graphql/search"], result: PULL_ROW },
   {
     name: READ.listAlerts,
     params: { repo: "widgets" },
@@ -229,6 +242,27 @@ const READS: ReadCase[] = [
       total: 4,
     },
   },
+  {
+    // #9 is found by both searches and listed once for each task it names;
+    // old-7 names a task by the earlier prefix.
+    name: READ.linkedWork,
+    params: {},
+    answers: ["graphql/linked-work"],
+    result: {
+      tasks: [42, 57, 7, 61],
+      references: ["acme-42", "acme-57", "acme-7", "acme-61"],
+      repositories: ["acme/widgets", "acme/widgets", "acme/Gadgets", "acme/widgets"],
+      numbers: [9, 9, 12, 13],
+      titles: ["Fix sign-in (acme-42)", "Fix sign-in (acme-42)", "Finish the acme migration", "Cache the issue counts"],
+      urls: [
+        "https://github.com/acme/widgets/pull/9",
+        "https://github.com/acme/widgets/pull/9",
+        "https://github.com/acme/Gadgets/pull/12",
+        "https://github.com/acme/widgets/pull/13",
+      ],
+      count: 4,
+    },
+  },
 ];
 
 /** GitHub's answer with a pull request's checks withheld: the field refused, the rest answered. */
@@ -245,7 +279,7 @@ function unchecked(name: string, nodes: (data: any) => any[]): any {
 }
 
 describe("reads", () => {
-  it("covers all sixteen", () => {
+  it("covers all nineteen", () => {
     expect(READS.map((one) => one.name).sort()).toEqual(Object.values(READ).sort());
   });
 
@@ -253,7 +287,10 @@ describe("reads", () => {
     it(`${one.name} answers from GitHub's answer`, async () => {
       const run = await call(one.name, one.params, ...one.answers);
       expect(run).toEqual({ requests: expect.any(Array), result: one.result });
-      for (const request of run.requests) expect(request.headers).toEqual(HEADERS);
+      for (const request of run.requests) {
+        expect(request.headers).toEqual(HEADERS);
+        expect(request.connection).toBe(ON_ACCOUNT.includes(one.name) ? "account" : "workspace");
+      }
     });
 
     it(`${one.name} says so when GitHub refuses the installation`, async () => {
@@ -366,12 +403,60 @@ describe("reads", () => {
     });
   });
 
+  it("asks for the member's own review requests and pull requests with their account alone, naming no organization", async () => {
+    const mine = (name: string, params: Record<string, unknown>) =>
+      runEndpoint(plugin, name, { params, connections: { account: {} }, now: NOW, responses: [{ body: recorded("graphql/search") }] });
+    for (const [name, asked] of [
+      [READ.myReviewRequests, "review-requested:@me"],
+      [READ.myPullRequests, "author:@me"],
+    ]) {
+      const run = await mine(name, { limit: 10 });
+      expect(run.requests.map((request) => [request.method, request.url, request.connection])).toEqual([["POST", `${API}/graphql`, "account"]]);
+      expect(variables(run)).toEqual({ query: `is:pr is:open ${asked} archived:false sort:created-desc`, first: 10 });
+      expect(run).toMatchObject({ result: PULL_ROW });
+      expect(variables(await mine(name, {})).first).toBe(30);
+    }
+  });
+
   it("asks for the organization's pull requests changed since a time, a day back unless it says", async () => {
     const since = await call(READ.recentlyUpdated, { since: "2026-10-01T11:00:00Z" }, "graphql/recently-updated");
     expect(since.requests[0].connection).toBe("workspace");
     expect(variables(since)).toEqual({ query: "type:pr org:acme updated:>=2026-10-01T11:00:00+00:00 sort:updated-desc", first: 100 });
     const unsaid = await call(READ.recentlyUpdated, {}, "graphql/recently-updated");
     expect(variables(unsaid).query).toBe("type:pr org:acme updated:>=2026-09-30T12:00:00+00:00 sort:updated-desc");
+  });
+
+  it("searches the organization for the prefix as a word and for branches beginning with it, and lists nothing without one", async () => {
+    const linked = (settings: Record<string, string>, workspace: Record<string, unknown> = CONNECTIONS.workspace) =>
+      runEndpoint(plugin, READ.linkedWork, { connections: { workspace }, settings, now: NOW, responses: [{ body: recorded("graphql/linked-work") }] });
+    const run = await linked(INSTALL.settings);
+    expect(run.requests[0].connection).toBe("workspace");
+    expect(variables(run)).toEqual({
+      named: '"acme" type:pr is:open org:acme sort:updated-desc',
+      branched: "head:acme type:pr is:open org:acme sort:updated-desc",
+      first: 50,
+    });
+    const personal = await linked(INSTALL.settings, { owner: "alice", installation_id: 43, owner_type: "User" });
+    expect(variables(personal).branched).toBe("head:acme type:pr is:open user:alice sort:updated-desc");
+    // No prefix, or one Initiative could not hold: GitHub is asked for one pull request, and none is listed.
+    for (const settings of [{}, { task_prefix: 'acme" org:other' }] as Array<Record<string, string>>) {
+      const none = await linked(settings);
+      expect(variables(none)).toEqual({
+        named: "type:pr is:open org:acme sort:updated-desc",
+        branched: "type:pr is:open org:acme sort:updated-desc",
+        first: 1,
+      });
+      expect(none).toMatchObject({ result: { tasks: [], references: [], numbers: [], count: 0 } });
+    }
+  });
+
+  it("lists no pull request that only nearly names a task", async () => {
+    // acme-ui, xacme-42, acme-420x, acme-0, "acme 42" and a branch named acme-tools.
+    const answer = recorded("graphql/linked-work");
+    for (const search of [answer.data.named, answer.data.branched]) {
+      search.nodes = search.nodes.filter((node: { number?: number }) => [10, 11, 14].includes(node.number!));
+    }
+    expect(await call(READ.linkedWork, {}, { body: answer })).toMatchObject({ result: { tasks: [], count: 0 } });
   });
 
   it("answers what it can of a pull request whose checks GitHub withholds", async () => {
@@ -439,7 +524,7 @@ describe("reads", () => {
 interface WriteCase {
   name: string;
   params: Record<string, unknown>;
-  /** The change it makes as the member, and GitHub's answer. */
+  /** The change it makes, and GitHub's answer. */
   change: [method: string, path: string, body: unknown];
   answer: string;
   result: Record<string, unknown>;
@@ -491,12 +576,14 @@ describe("writes", () => {
   });
 
   for (const one of WRITES) {
-    it(`${one.name} writes as the member, in the repository on the organization`, async () => {
-      const run = await call(one.name, one.params, one.answer);
-      const [method, path, body] = one.change;
-      expect(run.requests).toEqual([{ method, url: `${API}${path}`, headers: HEADERS, body, connection: "account" }]);
-      expect(run).toMatchObject({ result: one.result });
-    });
+    for (const [actor, connection] of ACTORS) {
+      it(`${one.name} writes as the ${actor} on the ${connection} connection, in the repository on the organization`, async () => {
+        const run = await as(actor)(one.name, one.params, one.answer);
+        const [method, path, body] = one.change;
+        expect(run.requests).toEqual([{ method, url: `${API}${path}`, headers: HEADERS, body, connection }]);
+        expect(run).toMatchObject({ result: one.result });
+      });
+    }
   }
 
   it("passes GitHub's refusal of the member through", async () => {
@@ -520,24 +607,26 @@ describe("writes", () => {
     }
   });
 
-  it("label reads the issue's labels, then sets them as the member", async () => {
-    const run = await call(
-      WRITE.label,
-      { repo: "widgets", number: 7, add: ["triage", "bug"], remove: ["wontfix"] },
-      "rest/issue",
-      "rest/labels"
-    );
-    expect(run.requests).toEqual([
-      { method: "GET", url: `${API}/repos/acme/widgets/issues/7`, headers: HEADERS, connection: "workspace" },
-      {
-        method: "PUT",
-        url: `${API}/repos/acme/widgets/issues/7/labels`,
-        headers: HEADERS,
-        body: { labels: ["triage", "bug"] },
-        connection: "account",
-      },
-    ]);
-    expect(run).toMatchObject({ result: { repository: "widgets", number: 7 } });
+  it("label reads the issue's labels as the organization, then sets them as whoever the call is made as", async () => {
+    for (const [actor, connection] of ACTORS) {
+      const run = await as(actor)(
+        WRITE.label,
+        { repo: "widgets", number: 7, add: ["triage", "bug"], remove: ["wontfix"] },
+        "rest/issue",
+        "rest/labels"
+      );
+      expect(run.requests).toEqual([
+        { method: "GET", url: `${API}/repos/acme/widgets/issues/7`, headers: HEADERS, connection: "workspace" },
+        {
+          method: "PUT",
+          url: `${API}/repos/acme/widgets/issues/7/labels`,
+          headers: HEADERS,
+          body: { labels: ["triage", "bug"] },
+          connection,
+        },
+      ]);
+      expect(run).toMatchObject({ result: { repository: "widgets", number: 7 } });
+    }
   });
 
   it("label keeps a label named both to add and to remove, and may remove every label", async () => {
@@ -553,13 +642,14 @@ describe("writes", () => {
     expect(run).toMatchObject({ unavailable: "invalid" });
   });
 
-  it("move-project-item sets the card's field as the member", async () => {
+  it("move-project-item sets the card's field as whoever the call is made as", async () => {
     const params = { project_id: "PVT_1", item_id: "PVTI_7", field_id: "F_1", option_id: "O_2" };
-    const run = await call(WRITE.moveProjectItem, params, "graphql/moved");
-    expect(run.requests).toHaveLength(1);
-    expect(run.requests[0].connection).toBe("account");
-    expect(variables(run)).toEqual({ project: "PVT_1", item: "PVTI_7", field: "F_1", option: "O_2" });
-    expect(run).toMatchObject({ result: { item_id: "PVTI_7" } });
+    for (const [actor, connection] of ACTORS) {
+      const run = await as(actor)(WRITE.moveProjectItem, params, "graphql/moved");
+      expect(run.requests.map((request) => [request.method, request.url, request.connection]), actor).toEqual([["POST", `${API}/graphql`, connection]]);
+      expect(variables(run)).toEqual({ project: "PVT_1", item: "PVTI_7", field: "F_1", option: "O_2" });
+      expect(run).toMatchObject({ result: { item_id: "PVTI_7" } });
+    }
   });
 });
 

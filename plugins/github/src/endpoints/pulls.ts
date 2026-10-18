@@ -1,5 +1,6 @@
 import { defineEndpoint } from "initiative-plugin-sdk/manifest";
 
+import { PREFIX, TASKS } from "../linking.js";
 import {
   ACCOUNT,
   ASSIGNEES_OUT,
@@ -40,6 +41,7 @@ import {
   WORKSPACE,
 } from "../vocabulary.js";
 import {
+  AS_MEMBER,
   GITHUB_ERRORS,
   graphql,
   LIMIT,
@@ -47,6 +49,8 @@ import {
   NEEDS_NUMBER,
   NEEDS_REPO,
   PAGE,
+  PER_ACTOR,
+  PERSONAL_READ,
   PUBLIC_READ,
   PUBLIC_WRITE,
   REPO_NAME,
@@ -77,6 +81,14 @@ const ORDER_IN = { ...SORT_IN, ...DIRECTION_IN, ...LIMIT_IN };
 /** A GitHub login: letters, digits and single inner hyphens, at most 39. */
 const LOGIN = `($login := params.review_requested; $length($login) <= 39 and $contains($login, /^[A-Za-z0-9]+(-[A-Za-z0-9]+)*$/))`;
 
+/** GitHub's search for pull requests, each asked for what every row says of it. */
+const SEARCH = `query Search($query: String!, $first: Int!) {
+  search(query: $query, type: ISSUE, first: $first) {
+    issueCount
+    nodes { ... on PullRequest { ${ROW_FIELDS} } }
+  }
+}`;
+
 /**
  * Pull requests in the repository a call names, through GitHub's search:
  * `reviewer` is the search term for whose review is wanted.
@@ -85,12 +97,7 @@ const LOGIN = `($login := params.review_requested; $length($login) <= 39 and $co
  */
 function search(reviewer: string, connection: string) {
   return graphql(
-    `query Search($query: String!, $first: Int!) {
-       search(query: $query, type: ISSUE, first: $first) {
-         issueCount
-         nodes { ... on PullRequest { ${ROW_FIELDS} } }
-       }
-     }`,
+    SEARCH,
     `(
       $quoted := function($value) { '"' & $replace($value, '"', '') & '"' };
       {
@@ -111,10 +118,23 @@ function search(reviewer: string, connection: string) {
   );
 }
 
+/**
+ * The member's own open pull requests of one kind, newest first, through
+ * GitHub's search as them: `@me` is whoever's account asks. No organization is
+ * named, so GitHub answers from every repository both they and the GitHub App
+ * can see, as its own lists of pull requests do.
+ */
+function mine(qualifier: string) {
+  return graphql(SEARCH, `{"query": "is:pr is:open ${qualifier} archived:false sort:created-desc", "first": ${LIMIT}}`, ACCOUNT);
+}
+
 const FOUND = `(
   $search := response.body.data.search;
   ${rows("$search.nodes", "$search.issueCount")}
 )`;
+
+/** The installation's account, as GitHub's search names an organization's or a user's. */
+const OWNER = `(connections.workspace.owner_type = "User" ? "user:" : "org:") & connections.workspace.owner`;
 
 /** What a pull request's review and checks are asked for: GitHub's own combined answers. */
 const REVIEW_FIELDS = "reviewDecision statusCheckRollup { state }";
@@ -181,15 +201,51 @@ export const reviewQueue = defineEndpoint({
     "Les pull requests d'un dépôt qui ont demandé la revue du membre."
   ),
   group: "reviews",
-  public: true,
-  actors: ["member"],
-  requires: { all_of: [WORKSPACE, ACCOUNT] },
+  ...AS_MEMBER,
   cache_ttl_seconds: 60,
   params: { ...PULL_PARAMS, ...ORDER_IN },
   returns: ROWS_OUT,
   // GitHub's search as the member, for whom `@me` stands.
   request: search(`"review-requested:@me"`, ACCOUNT),
   ...needs(NEEDS_REPO),
+  map: FOUND,
+});
+
+export const myReviewRequests = defineEndpoint({
+  direction: "read",
+  label: text("Your review requests", "Deine Review-Anfragen", "Tus solicitudes de revisión", "Vos demandes de revue"),
+  description: text(
+    "The open pull requests that asked for the member's review, in any organization, as their own GitHub account sees them.",
+    "Die offenen Pull Requests, die die Review des Mitglieds angefragt haben, in jeder Organisation, so wie sein eigenes GitHub-Konto sie sieht.",
+    "Las pull requests abiertas que pidieron la revisión del miembro, en cualquier organización, tal como las ve su propia cuenta de GitHub.",
+    "Les pull requests ouvertes qui ont demandé la revue du membre, dans toute organisation, telles que son propre compte GitHub les voit."
+  ),
+  group: "reviews",
+  ...PERSONAL_READ,
+  cache_ttl_seconds: 60,
+  params: { ...LIMIT_IN },
+  returns: ROWS_OUT,
+  request: mine("review-requested:@me"),
+  errors: GITHUB_ERRORS,
+  map: FOUND,
+});
+
+export const myPullRequests = defineEndpoint({
+  direction: "read",
+  label: text("Your pull requests", "Deine Pull Requests", "Tus pull requests", "Vos pull requests"),
+  description: text(
+    "The member's own open pull requests, in any organization, as their own GitHub account sees them.",
+    "Die eigenen offenen Pull Requests des Mitglieds, in jeder Organisation, so wie sein eigenes GitHub-Konto sie sieht.",
+    "Las pull requests abiertas del propio miembro, en cualquier organización, tal como las ve su propia cuenta de GitHub.",
+    "Les pull requests ouvertes du membre lui-même, dans toute organisation, telles que son propre compte GitHub les voit."
+  ),
+  group: "reviews",
+  ...PERSONAL_READ,
+  cache_ttl_seconds: 60,
+  params: { ...LIMIT_IN },
+  returns: ROWS_OUT,
+  request: mine("author:@me"),
+  errors: GITHUB_ERRORS,
   map: FOUND,
 });
 
@@ -319,7 +375,7 @@ export const recentlyUpdated = defineEndpoint({
     `{
       "query": $join([
         "type:pr",
-        (connections.workspace.owner_type = "User" ? "user:" : "org:") & connections.workspace.owner,
+        ${OWNER},
         "updated:>=" & $fromMillis(params.since ? $toMillis(params.since) : $millis() - 86400000, "${SEARCH_TIME}"),
         "sort:updated-desc"
       ], " "),
@@ -346,14 +402,105 @@ export const recentlyUpdated = defineEndpoint({
   )`,
 });
 
+/**
+ * How many pull requests each of linked work's two searches reads: one asks
+ * for their descriptions, and GitHub's answer has to stay within what
+ * Initiative reads of one, 512 KiB.
+ */
+const LINKED_PAGE = 50;
+
+/** What linked work asks of a pull request: where it is, and the branch and title that may name a task. */
+const LINKED_FIELDS = "number title url headRefName repository { nameWithOwner }";
+
+/**
+ * The organization's open pull requests that name one of the community's
+ * tasks, most recently updated first, one row for each task a pull request
+ * names. GitHub's search splits words at punctuation and reads no branch's
+ * name, so it is asked twice in one call: for the prefix as a word of a title,
+ * description or comment, and for branches whose names begin with it. Only the
+ * pull requests whose branch, title or description holds a reference are kept.
+ * The searches name the installation's account and the install's prefix, and
+ * nothing a caller sends. With no prefix there is nothing to find.
+ */
+export const linkedWork = defineEndpoint({
+  direction: "read",
+  label: text("Linked pull requests", "Verknüpfte Pull Requests", "Pull requests vinculadas", "Pull requests liées"),
+  description: text(
+    "The organization's open pull requests that name one of the community's tasks, with each task they name.",
+    "Die offenen Pull Requests der Organisation, die eine Aufgabe der Community nennen, mit jeder Aufgabe, die sie nennen.",
+    "Las pull requests abiertas de la organización que nombran una tarea de la comunidad, con cada tarea que nombran.",
+    "Les pull requests ouvertes de l'organisation qui nomment une tâche de la communauté, avec chaque tâche qu'elles nomment."
+  ),
+  group: "reviews",
+  ...PUBLIC_READ,
+  cache_ttl_seconds: 60,
+  returns: {
+    // Each task by its id and by the reference people write for it, beside
+    // the pull request that names it.
+    tasks: many(out("int", { label: text("Task", "Aufgabe", "Tarea", "Tâche") })),
+    references: many(out("string", { label: text("Reference", "Referenz", "Referencia", "Référence") })),
+    repositories: many(out("string")),
+    numbers: many(out("int")),
+    titles: many(out("string")),
+    urls: many(out("url")),
+    ...COUNT_OUT,
+    ...UNAVAILABLE,
+  },
+  request: graphql(
+    `query Linked($named: String!, $branched: String!, $first: Int!) {
+       named: search(query: $named, type: ISSUE, first: $first) { nodes { ... on PullRequest { ${LINKED_FIELDS} body } } }
+       branched: search(query: $branched, type: ISSUE, first: $first) { nodes { ... on PullRequest { ${LINKED_FIELDS} } } }
+     }`,
+    `(
+      $prefix := ${PREFIX};
+      $where := "type:pr is:open " & ${OWNER} & " sort:updated-desc";
+      {
+        "named": ($prefix ? '"' & $prefix & '" ' : "") & $where,
+        "branched": ($prefix ? "head:" & $prefix & " " : "") & $where,
+        "first": $prefix ? ${LINKED_PAGE} : 1
+      }
+    )`
+  ),
+  errors: GITHUB_ERRORS,
+  map: `(
+    ${TASKS};
+    $prefix := ${PREFIX};
+    $found := response.body.data;
+    $pulls := function($nodes) { $nodes[$type(number) = "number" and $type(repository.nameWithOwner) = "string"] };
+    $key := function($pull) { $lowercase($pull.repository.nameWithOwner) & "#" & $pull.number };
+    $named := $pulls($found.named.nodes);
+    $seen := [$named.$key($)];
+    $links := $prefix ? [[$named, $pulls($found.branched.nodes)[$not($key($) in $seen)]].(
+      $pull := $;
+      $tasks([headRefName, title, body]).{
+        "task": $,
+        "reference": $prefix & "-" & $,
+        "repository": $pull.repository.nameWithOwner,
+        "number": $pull.number,
+        "title": $type($pull.title) = "string" ? $pull.title : "",
+        "url": $type($pull.url) = "string" ? $pull.url : ""
+      }
+    )];
+    {
+      "tasks": [$links.task],
+      "references": [$links.reference],
+      "repositories": [$links.repository],
+      "numbers": [$links.number],
+      "titles": [$links.title],
+      "urls": [$links.url],
+      "count": $count($links)
+    }
+  )`,
+});
+
 export const requestReview = defineEndpoint({
   direction: "write",
   label: text("Request a review", "Review anfragen", "Solicitar una revisión", "Demander une revue"),
   description: text(
-    "Asks people or teams to review a pull request, as the member.",
-    "Bittet Personen oder Teams, einen Pull Request zu prüfen, als das Mitglied.",
-    "Pide a personas o equipos que revisen una pull request, como el miembro.",
-    "Demande à des personnes ou des équipes de relire une pull request, en tant que le membre."
+    "Asks people or teams to review a pull request, as the member or as the organization.",
+    "Bittet Personen oder Teams, einen Pull Request zu prüfen, als das Mitglied oder als die Organisation.",
+    "Pide a personas o equipos que revisen una pull request, como el miembro o como la organización.",
+    "Demande à des personnes ou des équipes de relire une pull request, en tant que le membre ou l'organisation."
   ),
   group: "reviews",
   ...PUBLIC_WRITE,
@@ -371,7 +518,7 @@ export const requestReview = defineEndpoint({
   returns: { ...REPO_OUT, ...NUMBER_OUT, ...LINK_OUT },
   identity: ISSUE_IDENTITY,
   request: rest("POST", `${REPO_PATH} & "/pulls/" & params.number & "/requested_reviewers"`, {
-    connection: ACCOUNT,
+    connection: PER_ACTOR,
     body: `$merge([
       $count(params.reviewers) ? {"reviewers": [params.reviewers]},
       $count(params.team_reviewers) ? {"team_reviewers": [params.team_reviewers]}

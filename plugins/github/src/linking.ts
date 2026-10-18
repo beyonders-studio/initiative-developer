@@ -30,7 +30,7 @@ const CANDIDATES = 1000;
  * named in `feature/ACME-42-fix` and `[acme-42]`, and not in `xacme-42`, and
  * `acme-420` names 420.
  */
-const TASKS = `$tasks := function($texts) {(
+export const TASKS = `$tasks := function($texts) {(
   $prefixes := [settings.${TASK_PREFIX}, aliases.${TASK_PREFIX}];
   $distinct($match(
     $join($filter([$texts], function($text) { $type($text) = "string" }), " "),
@@ -41,6 +41,16 @@ const TASKS = `$tasks := function($texts) {(
     $reference[0] in $prefixes and $contains($reference[1], /^[1-9][0-9]{0,8}$/) ? $number($reference[1])
   ))
 )}`;
+
+/**
+ * The install's prefix, when it is one as Initiative holds it: a lowercase
+ * letter, then lowercase letters and digits. Anything else is none, so a
+ * search names the prefix as one word or names none.
+ */
+export const PREFIX = `(
+  $value := settings.${TASK_PREFIX};
+  $type($value) = "string" and $contains($value, /^[a-z][a-z0-9]{1,${CAPS.uniqueSettingValueLength - 1}}$/) ? $value : ""
+)`;
 
 /** A pull request's link's ref, from its repository's full name and its number. */
 const pullRef = (repository: Expression, number: Expression): Expression => `"pr:" & $lowercase(${repository}) & "#" & ${number}`;

@@ -7,9 +7,11 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { validateManifest, type Manifest, type PartNode } from "initiative-plugin-sdk/manifest";
+import { validateManifest, type Manifest, type PartNode, type VendorRequest } from "initiative-plugin-sdk/manifest";
+import { runExchangeBody } from "initiative-plugin-sdk/testing";
 import { describe, expect, it } from "vitest";
 
+import plugin from "../src/plugin.js";
 import { ACCOUNT, declare, LISTING_UID, READ, READ_IDS, WORKSPACE, WRITE } from "../src/vocabulary.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -45,6 +47,18 @@ function later(a: string, b: string): boolean {
 
 const connection = (id: string) => manifest.connections!.find((one) => one.id === id)!;
 
+type Endpoint = NonNullable<Manifest["endpoints"]>[number];
+
+/** An endpoint's requests to GitHub: its steps' in order, or its one. */
+const requestsOf = (endpoint: Endpoint): VendorRequest[] =>
+  endpoint.steps?.map((step) => step.request) ?? (endpoint.request ? [endpoint.request] : []);
+
+/** Whether a request only reads: a GET, or a GraphQL query. */
+const reads = (request: VendorRequest) => request.method === "GET" || Boolean(request.graphql?.query.startsWith("query "));
+
+/** What runs on the member's own GitHub account alone: Start a branch. */
+const MEMBERS_ALONE = [WRITE.startBranch].map(declare);
+
 /** The words a part's tree draws: its sections' titles and its texts. */
 const words = (node: PartNode): unknown[] => [
   ...(node.type === "section" && node.props?.title ? [node.props.title] : []),
@@ -57,10 +71,10 @@ describe("manifest", () => {
     expect(validateManifest(manifest)).toEqual([]);
   });
 
-  it("declares sixteen reads, eight writes and six announcements", () => {
+  it("declares nineteen reads, eight writes and six announcements", () => {
     const counts: Record<string, number> = {};
     for (const endpoint of manifest.endpoints ?? []) counts[endpoint.direction] = (counts[endpoint.direction] ?? 0) + 1;
-    expect(counts).toEqual({ read: 16, write: 8, emit: 6 });
+    expect(counts).toEqual({ read: 19, write: 8, emit: 6 });
   });
 
   it("is declarative: Initiative calls GitHub itself, runs no service, and keeps links on the tasks it may read", () => {
@@ -88,16 +102,26 @@ describe("manifest", () => {
   });
 
   it("keeps every endpoint 2.6.0 had, a pull request's adding its review and checks, and adds the review queue", () => {
-    const terms = ({ id, direction, params, returns, public: open, actors, identity }: NonNullable<Manifest["endpoints"]>[number]) =>
+    const terms = ({ id, direction, params, returns, public: open, actors, identity }: Endpoint) =>
       ({ id, direction, params, returns, public: open, actors, identity });
+    // Who may call each is pinned below: a write now takes the community as
+    // well as a member.
+    const shape = ({ actors, ...rest }: ReturnType<typeof terms>) => rest;
     const before = unprefixed(service.endpoints!.map(terms));
     const after = unprefixed(manifest.endpoints!.map(terms));
-    const added = [READ.reviewQueue, READ.recentlyUpdated, WRITE.startBranch] as string[];
+    const added = [
+      READ.reviewQueue,
+      READ.recentlyUpdated,
+      READ.linkedWork,
+      READ.myReviewRequests,
+      READ.myPullRequests,
+      WRITE.startBranch,
+    ] as string[];
     const said = (value: { key: string }) => ["review", "checks"].includes(value.key);
     const kept = after
       .filter((endpoint) => !added.includes(endpoint.id))
       .map((endpoint) => (endpoint.id === READ.getPullRequest ? { ...endpoint, returns: endpoint.returns!.filter((value) => !said(value)) } : endpoint));
-    expect(kept).toEqual(before);
+    expect(kept.map(shape)).toEqual(before.map(shape));
     const pull = after.find((endpoint) => endpoint.id === READ.getPullRequest)!;
     expect(pull.returns!.filter(said).map(({ key, type }) => [key, type])).toEqual([
       ["review", "string"],
@@ -143,14 +167,35 @@ describe("manifest", () => {
     }
   });
 
-  it("makes every write run as the member, never as the plug-in", () => {
-    for (const endpoint of (manifest.endpoints ?? []).filter((one) => one.direction === "write")) {
-      expect(endpoint.actors).toEqual(["member"]);
-      expect(endpoint.requires).toEqual({ all_of: ["workspace", "account"] });
+  it("makes every other write as a member on their own account, or as the community on the organization's installation", () => {
+    const writes = (manifest.endpoints ?? []).filter((one) => one.direction === "write" && !MEMBERS_ALONE.includes(one.id));
+    expect(writes.map((one) => one.id)).toContain(declare(WRITE.moveProjectItem));
+    expect(writes).toHaveLength(7);
+    for (const endpoint of writes) {
+      expect(endpoint.actors, endpoint.id).toEqual(["member", "installation"]);
+      // A call made as the member requires their account by the connection it carries.
+      expect(endpoint.requires, endpoint.id).toEqual({ all_of: [WORKSPACE] });
+      const requests = requestsOf(endpoint);
+      // What it changes, it changes as whoever the call is made as; what it
+      // only reads first, it may read as the organization.
+      for (const request of requests.filter((one) => !reads(one))) {
+        expect(request.connection, endpoint.id).toEqual({ member: ACCOUNT, installation: WORKSPACE });
+      }
+      for (const request of requests) expect(request.connection, endpoint.id).not.toBe(ACCOUNT);
+    }
+  });
+
+  it("runs Start a branch as the member alone, on their own account", () => {
+    for (const id of MEMBERS_ALONE) {
+      const endpoint = manifest.endpoints!.find((one) => one.id === id)!;
+      expect(endpoint, id).toMatchObject({ actors: ["member"], requires: { all_of: [WORKSPACE, ACCOUNT] } });
+      for (const request of requestsOf(endpoint)) expect(request.connection, id).toBe(ACCOUNT);
     }
   });
 
   it("offers every read and write to other plug-ins but the task's own Start a branch, and no announcement", () => {
+    // A member's own reads take a member; every other read either, on the organization.
+    const members = [READ_IDS.reviewQueue, READ_IDS.myReviewRequests, READ_IDS.myPullRequests, ...MEMBERS_ALONE];
     for (const endpoint of manifest.endpoints ?? []) {
       // Start a branch names the branch after the task its action runs on.
       if (endpoint.direction === "emit" || endpoint.id === declare(WRITE.startBranch)) {
@@ -159,11 +204,64 @@ describe("manifest", () => {
       }
       expect(endpoint.public).toBe(true);
       expect(endpoint.admin_only).toBeUndefined();
-      if (endpoint.direction === "read" && endpoint.id !== READ_IDS.reviewQueue) {
+      if (endpoint.direction === "read" && !members.includes(endpoint.id)) {
         expect(endpoint.actors).toEqual(["installation", "member"]);
         expect(endpoint.requires).toEqual({ all_of: ["workspace"] });
       }
     }
+  });
+
+  it("reads a member's own review requests and pull requests with their account alone, in any community", () => {
+    for (const name of [READ.myReviewRequests, READ.myPullRequests]) {
+      const endpoint = manifest.endpoints!.find((one) => one.id === declare(name))!;
+      expect(endpoint).toMatchObject({ actors: ["member"], requires: { all_of: [ACCOUNT] }, request: { connection: ACCOUNT } });
+      // Its widget is offered to whoever has connected their account, organization or not.
+      expect(manifest.widgets!.find((widget) => widget.id === name)).toMatchObject({
+        endpoints: [endpoint.id],
+        requires: { all_of: [ACCOUNT] },
+      });
+    }
+  });
+
+  it("reads on the organization's installation, or writes issues, pull requests and project cards, which its tokens are asked for alone", async () => {
+    /** What an installation token is asked for, on an account of GitHub's `type`. */
+    const asked = async (owner_type: string) =>
+      (await runExchangeBody(plugin, WORKSPACE, { fields: { owner: "acme", installation_id: 42, owner_type } })).permissions as Record<string, string>;
+    // What an installation token carries: the organization's connection, and
+    // a write's made as the community.
+    const installation = (manifest.endpoints ?? [])
+      .flatMap(requestsOf)
+      .filter((request) => (typeof request.connection === "object" ? request.connection.installation : request.connection) === WORKSPACE);
+    const writes = installation.filter((request) => !reads(request));
+    expect(writes.length).toBeGreaterThan(0);
+    expect(installation.length).toBeGreaterThan(writes.length);
+    // What GitHub asks of each: a review request, pull requests; the issues
+    // API, which also serves a pull request's comments, state and labels,
+    // issues; a card's field, the organization's projects.
+    const needs = (request: VendorRequest) =>
+      request.graphql?.query.includes("updateProjectV2ItemFieldValue")
+        ? "organization_projects"
+        : request.graphql
+          ? undefined
+          : request.url.includes('"/requested_reviewers"')
+            ? "pull_requests"
+            : request.url.includes('"/issues')
+              ? "issues"
+              : undefined;
+    for (const request of writes) expect(needs(request), request.url).toBeDefined();
+    // An organization's tokens write those alone, and never a repository's contents.
+    const organization = await asked("Organization");
+    const written = Object.keys(organization).filter((key) => organization[key] !== "read");
+    expect(written.sort()).toEqual([...new Set(writes.map(needs))].sort());
+    // A personal account's are asked for no organization permission, which
+    // its installation cannot hold.
+    const personal = await asked("User");
+    const { organization_projects, ...repository } = organization;
+    expect(organization_projects).toBe("write");
+    expect(personal).toEqual(repository);
+    expect(Object.keys(personal).filter((key) => key.startsWith("organization_"))).toEqual([]);
+    for (const permissions of [organization, personal]) expect(permissions.contents).toBe("read");
+    for (const request of installation) expect(request.url, request.url).not.toMatch(/\/git\/|\/contents/);
   });
 
   it("has Initiative run both GitHub connections with the GitHub App's own values", () => {
@@ -201,9 +299,12 @@ describe("manifest", () => {
       after_connect: { code: "installation-not-held" },
     });
     expect(workspace.flow!.revoke).toBeUndefined();
+    // What each installation token is asked for depends on the account it is
+    // on, so its body is an expression (see the test above).
     expect(workspace.token).toEqual({
       type: "jwt_bearer",
       exchange_url: "https://api.github.com/app/installations/{installation_id}/access_tokens",
+      exchange_body: expect.stringContaining("connection.owner_type"),
       iss: "{vendor.app_id}",
       key: "{vendor.private_key}",
       alg: "RS256",
