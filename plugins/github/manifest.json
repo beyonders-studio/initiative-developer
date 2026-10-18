@@ -250,6 +250,18 @@
       "token": {
         "type": "jwt_bearer",
         "exchange_url": "https://api.github.com/app/installations/{installation_id}/access_tokens",
+        "exchange_body": {
+          "permissions": {
+            "issues": "read",
+            "pull_requests": "read",
+            "contents": "read",
+            "checks": "read",
+            "statuses": "read",
+            "vulnerability_alerts": "read",
+            "organization_projects": "read",
+            "metadata": "read"
+          }
+        },
         "iss": "{vendor.app_id}",
         "key": "{vendor.private_key}",
         "alg": "RS256",
@@ -3354,6 +3366,445 @@
       "map": "(\n    $status := function($merged, $state, $draft) {\n  $merged = true ? \"merged\" : $lowercase($string($state)) = \"closed\" ? \"closed\" : $draft = true ? \"draft\" : \"open\"\n};\n    \n  $refused := $exists(response.body.errors[\"statusCheckRollup\" in path]);\n  $review := function($decision) {\n    $decision = null ? \"unreviewed\"\n    : $decision = \"APPROVED\" ? \"approved\"\n    : $decision = \"CHANGES_REQUESTED\" ? \"changes_requested\"\n    : $decision = \"REVIEW_REQUIRED\" ? \"review_required\"\n    : \"\"\n  };\n  $checks := function($rollup) {\n    $rollup = null ? ($refused ? \"\" : \"none\")\n    : $rollup.state = \"SUCCESS\" ? \"passing\"\n    : $rollup.state in [\"FAILURE\", \"ERROR\"] ? \"failing\"\n    : $rollup.state in [\"PENDING\", \"EXPECTED\"] ? \"pending\"\n    : \"\"\n  };\n    $search := response.body.data.search;\n    $pulls := $search.nodes[$type(number) = \"number\" and $type(repository.nameWithOwner) = \"string\"];\n    {\n      \"repositories\": [$pulls.repository.nameWithOwner],\n      \"numbers\": [$pulls.number],\n      \"titles\": [$pulls.(title ? title : \"\")],\n      \"urls\": [$pulls.(url ? url : \"\")],\n      \"statuses\": [$pulls.$status(merged, state, isDraft)],\n      \"reviews\": [$pulls.$review(reviewDecision)],\n      \"checks\": [$pulls.$checks(statusCheckRollup)],\n      \"count\": $count($pulls),\n      \"total\": $search.issueCount\n    }\n  )"
     },
     {
+      "id": "plugin.beyonders-studio.github.linked-work",
+      "direction": "read",
+      "label": {
+        "en": "Linked pull requests",
+        "de": "Verknüpfte Pull Requests",
+        "es": "Pull requests vinculadas",
+        "fr": "Pull requests liées"
+      },
+      "description": {
+        "en": "The organization's open pull requests that name one of the community's tasks, with each task they name.",
+        "de": "Die offenen Pull Requests der Organisation, die eine Aufgabe der Community nennen, mit jeder Aufgabe, die sie nennen.",
+        "es": "Las pull requests abiertas de la organización que nombran una tarea de la comunidad, con cada tarea que nombran.",
+        "fr": "Les pull requests ouvertes de l'organisation qui nomment une tâche de la communauté, avec chaque tâche qu'elles nomment."
+      },
+      "group": "reviews",
+      "public": true,
+      "actors": [
+        "installation",
+        "member"
+      ],
+      "requires": {
+        "all_of": [
+          "workspace"
+        ]
+      },
+      "cache_ttl_seconds": 60,
+      "returns": [
+        {
+          "key": "tasks",
+          "type": "int",
+          "label": {
+            "en": "Task",
+            "de": "Aufgabe",
+            "es": "Tarea",
+            "fr": "Tâche"
+          },
+          "list": true
+        },
+        {
+          "key": "references",
+          "type": "string",
+          "label": {
+            "en": "Reference",
+            "de": "Referenz",
+            "es": "Referencia",
+            "fr": "Référence"
+          },
+          "list": true
+        },
+        {
+          "key": "repositories",
+          "type": "string",
+          "list": true
+        },
+        {
+          "key": "numbers",
+          "type": "int",
+          "list": true
+        },
+        {
+          "key": "titles",
+          "type": "string",
+          "list": true
+        },
+        {
+          "key": "urls",
+          "type": "url",
+          "list": true
+        },
+        {
+          "key": "count",
+          "type": "int",
+          "label": {
+            "en": "How many",
+            "de": "Wie viele",
+            "es": "Cuántos",
+            "fr": "Combien"
+          }
+        },
+        {
+          "key": "unavailable",
+          "type": "string",
+          "label": {
+            "en": "Why there is no answer",
+            "de": "Warum es keine Antwort gibt",
+            "es": "Por qué no hay respuesta",
+            "fr": "Pourquoi il n'y a pas de réponse"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "\"https://api.github.com/graphql\"",
+        "headers": {
+          "Accept": "\"application/vnd.github+json\"",
+          "X-GitHub-Api-Version": "\"2022-11-28\"",
+          "User-Agent": "\"initiative-github\""
+        },
+        "graphql": {
+          "query": "query Linked($named: String!, $branched: String!, $first: Int!) { named: search(query: $named, type: ISSUE, first: $first) { nodes { ... on PullRequest { number title url headRefName repository { nameWithOwner } body } } } branched: search(query: $branched, type: ISSUE, first: $first) { nodes { ... on PullRequest { number title url headRefName repository { nameWithOwner } } } } }",
+          "variables": "(\n      $prefix := (\n  $value := settings.task_prefix;\n  $type($value) = \"string\" and $contains($value, /^[a-z][a-z0-9]{1,15}$/) ? $value : \"\"\n);\n      $where := \"type:pr is:open \" & (connections.workspace.owner_type = \"User\" ? \"user:\" : \"org:\") & connections.workspace.owner & \" sort:updated-desc\";\n      {\n        \"named\": ($prefix ? '\"' & $prefix & '\" ' : \"\") & $where,\n        \"branched\": ($prefix ? \"head:\" & $prefix & \" \" : \"\") & $where,\n        \"first\": $prefix ? 50 : 1\n      }\n    )"
+        },
+        "connection": "workspace"
+      },
+      "errors": [
+        {
+          "status": 403,
+          "when": "$exists(response.headers.\"retry-after\") or response.headers.\"x-ratelimit-remaining\" = \"0\"",
+          "code": "transient"
+        },
+        {
+          "status": "2xx",
+          "when": "response.body.errors[type = \"RATE_LIMITED\"]",
+          "code": "transient"
+        },
+        {
+          "status": "2xx",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
+          "code": "not-authorized"
+        },
+        {
+          "status": "2xx",
+          "when": "response.body.errors and $not($exists(response.body.data) and $boolean(response.body.data))",
+          "code": "invalid"
+        }
+      ],
+      "map": "(\n    $tasks := function($texts) {(\n  $prefixes := [settings.task_prefix, aliases.task_prefix];\n  $distinct($match(\n    $join($filter([$texts], function($text) { $type($text) = \"string\" }), \" \"),\n    /[A-Za-z0-9]+-[0-9]+[A-Za-z0-9]*/,\n    1000\n  ).(\n    $reference := $split($lowercase(match), \"-\");\n    $reference[0] in $prefixes and $contains($reference[1], /^[1-9][0-9]{0,8}$/) ? $number($reference[1])\n  ))\n)};\n    $prefix := (\n  $value := settings.task_prefix;\n  $type($value) = \"string\" and $contains($value, /^[a-z][a-z0-9]{1,15}$/) ? $value : \"\"\n);\n    $found := response.body.data;\n    $pulls := function($nodes) { $nodes[$type(number) = \"number\" and $type(repository.nameWithOwner) = \"string\"] };\n    $key := function($pull) { $lowercase($pull.repository.nameWithOwner) & \"#\" & $pull.number };\n    $named := $pulls($found.named.nodes);\n    $seen := [$named.$key($)];\n    $links := $prefix ? [[$named, $pulls($found.branched.nodes)[$not($key($) in $seen)]].(\n      $pull := $;\n      $tasks([headRefName, title, body]).{\n        \"task\": $,\n        \"reference\": $prefix & \"-\" & $,\n        \"repository\": $pull.repository.nameWithOwner,\n        \"number\": $pull.number,\n        \"title\": $type($pull.title) = \"string\" ? $pull.title : \"\",\n        \"url\": $type($pull.url) = \"string\" ? $pull.url : \"\"\n      }\n    )];\n    {\n      \"tasks\": [$links.task],\n      \"references\": [$links.reference],\n      \"repositories\": [$links.repository],\n      \"numbers\": [$links.number],\n      \"titles\": [$links.title],\n      \"urls\": [$links.url],\n      \"count\": $count($links)\n    }\n  )"
+    },
+    {
+      "id": "plugin.beyonders-studio.github.my-review-requests",
+      "direction": "read",
+      "label": {
+        "en": "Your review requests",
+        "de": "Deine Review-Anfragen",
+        "es": "Tus solicitudes de revisión",
+        "fr": "Vos demandes de revue"
+      },
+      "description": {
+        "en": "The open pull requests that asked for the member's review, in any organization, as their own GitHub account sees them.",
+        "de": "Die offenen Pull Requests, die die Review des Mitglieds angefragt haben, in jeder Organisation, so wie sein eigenes GitHub-Konto sie sieht.",
+        "es": "Las pull requests abiertas que pidieron la revisión del miembro, en cualquier organización, tal como las ve su propia cuenta de GitHub.",
+        "fr": "Les pull requests ouvertes qui ont demandé la revue du membre, dans toute organisation, telles que son propre compte GitHub les voit."
+      },
+      "group": "reviews",
+      "public": true,
+      "actors": [
+        "member"
+      ],
+      "requires": {
+        "all_of": [
+          "account"
+        ]
+      },
+      "cache_ttl_seconds": 60,
+      "params": [
+        {
+          "key": "limit",
+          "type": "int",
+          "label": {
+            "en": "How many",
+            "de": "Wie viele",
+            "es": "Cuántos",
+            "fr": "Combien"
+          }
+        }
+      ],
+      "returns": [
+        {
+          "key": "numbers",
+          "type": "int",
+          "list": true
+        },
+        {
+          "key": "titles",
+          "type": "string",
+          "list": true
+        },
+        {
+          "key": "urls",
+          "type": "url",
+          "list": true
+        },
+        {
+          "key": "states",
+          "type": "string",
+          "list": true
+        },
+        {
+          "key": "created_at",
+          "type": "string",
+          "label": {
+            "en": "Opened",
+            "de": "Geöffnet",
+            "es": "Abierta",
+            "fr": "Ouvert"
+          },
+          "list": true
+        },
+        {
+          "key": "updated_at",
+          "type": "string",
+          "label": {
+            "en": "Last updated",
+            "de": "Zuletzt aktualisiert",
+            "es": "Última actualización",
+            "fr": "Dernière mise à jour"
+          },
+          "list": true
+        },
+        {
+          "key": "closed_at",
+          "type": "string",
+          "list": true
+        },
+        {
+          "key": "count",
+          "type": "int",
+          "label": {
+            "en": "How many",
+            "de": "Wie viele",
+            "es": "Cuántos",
+            "fr": "Combien"
+          }
+        },
+        {
+          "key": "total",
+          "type": "int",
+          "label": {
+            "en": "How many in all",
+            "de": "Wie viele insgesamt",
+            "es": "Cuántos en total",
+            "fr": "Combien en tout"
+          }
+        },
+        {
+          "key": "unavailable",
+          "type": "string",
+          "label": {
+            "en": "Why there is no answer",
+            "de": "Warum es keine Antwort gibt",
+            "es": "Por qué no hay respuesta",
+            "fr": "Pourquoi il n'y a pas de réponse"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "\"https://api.github.com/graphql\"",
+        "headers": {
+          "Accept": "\"application/vnd.github+json\"",
+          "X-GitHub-Api-Version": "\"2022-11-28\"",
+          "User-Agent": "\"initiative-github\""
+        },
+        "graphql": {
+          "query": "query Search($query: String!, $first: Int!) { search(query: $query, type: ISSUE, first: $first) { issueCount nodes { ... on PullRequest { number title url state createdAt updatedAt closedAt } } } }",
+          "variables": "{\"query\": \"is:pr is:open review-requested:@me archived:false sort:created-desc\", \"first\": ($exists(params.limit) ? $min([$max([params.limit, 1]), 100]) : 30)}"
+        },
+        "connection": "account"
+      },
+      "errors": [
+        {
+          "status": 403,
+          "when": "$exists(response.headers.\"retry-after\") or response.headers.\"x-ratelimit-remaining\" = \"0\"",
+          "code": "transient"
+        },
+        {
+          "status": "2xx",
+          "when": "response.body.errors[type = \"RATE_LIMITED\"]",
+          "code": "transient"
+        },
+        {
+          "status": "2xx",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
+          "code": "not-authorized"
+        },
+        {
+          "status": "2xx",
+          "when": "response.body.errors and $not($exists(response.body.data) and $boolean(response.body.data))",
+          "code": "invalid"
+        }
+      ],
+      "map": "(\n  $search := response.body.data.search;\n  (\n    $rows := $search.nodes[$type($) = \"object\"];\n    {\n      \"numbers\": [$rows.(number ? number : 0)],\n      \"titles\": [$rows.(title ? title : \"\")],\n      \"urls\": [$rows.(url ? url : \"\")],\n      \"states\": [$rows.(state ? $lowercase(state) : \"\")],\n      \"created_at\": [$rows.(createdAt ? createdAt : \"\")],\n      \"updated_at\": [$rows.(updatedAt ? updatedAt : \"\")],\n      \"closed_at\": [$rows.(closedAt ? closedAt : \"\")],\n      \"count\": $count($rows),\n      \"total\": $search.issueCount\n    }\n  )\n)"
+    },
+    {
+      "id": "plugin.beyonders-studio.github.my-pull-requests",
+      "direction": "read",
+      "label": {
+        "en": "Your pull requests",
+        "de": "Deine Pull Requests",
+        "es": "Tus pull requests",
+        "fr": "Vos pull requests"
+      },
+      "description": {
+        "en": "The member's own open pull requests, in any organization, as their own GitHub account sees them.",
+        "de": "Die eigenen offenen Pull Requests des Mitglieds, in jeder Organisation, so wie sein eigenes GitHub-Konto sie sieht.",
+        "es": "Las pull requests abiertas del propio miembro, en cualquier organización, tal como las ve su propia cuenta de GitHub.",
+        "fr": "Les pull requests ouvertes du membre lui-même, dans toute organisation, telles que son propre compte GitHub les voit."
+      },
+      "group": "reviews",
+      "public": true,
+      "actors": [
+        "member"
+      ],
+      "requires": {
+        "all_of": [
+          "account"
+        ]
+      },
+      "cache_ttl_seconds": 60,
+      "params": [
+        {
+          "key": "limit",
+          "type": "int",
+          "label": {
+            "en": "How many",
+            "de": "Wie viele",
+            "es": "Cuántos",
+            "fr": "Combien"
+          }
+        }
+      ],
+      "returns": [
+        {
+          "key": "numbers",
+          "type": "int",
+          "list": true
+        },
+        {
+          "key": "titles",
+          "type": "string",
+          "list": true
+        },
+        {
+          "key": "urls",
+          "type": "url",
+          "list": true
+        },
+        {
+          "key": "states",
+          "type": "string",
+          "list": true
+        },
+        {
+          "key": "created_at",
+          "type": "string",
+          "label": {
+            "en": "Opened",
+            "de": "Geöffnet",
+            "es": "Abierta",
+            "fr": "Ouvert"
+          },
+          "list": true
+        },
+        {
+          "key": "updated_at",
+          "type": "string",
+          "label": {
+            "en": "Last updated",
+            "de": "Zuletzt aktualisiert",
+            "es": "Última actualización",
+            "fr": "Dernière mise à jour"
+          },
+          "list": true
+        },
+        {
+          "key": "closed_at",
+          "type": "string",
+          "list": true
+        },
+        {
+          "key": "count",
+          "type": "int",
+          "label": {
+            "en": "How many",
+            "de": "Wie viele",
+            "es": "Cuántos",
+            "fr": "Combien"
+          }
+        },
+        {
+          "key": "total",
+          "type": "int",
+          "label": {
+            "en": "How many in all",
+            "de": "Wie viele insgesamt",
+            "es": "Cuántos en total",
+            "fr": "Combien en tout"
+          }
+        },
+        {
+          "key": "unavailable",
+          "type": "string",
+          "label": {
+            "en": "Why there is no answer",
+            "de": "Warum es keine Antwort gibt",
+            "es": "Por qué no hay respuesta",
+            "fr": "Pourquoi il n'y a pas de réponse"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "\"https://api.github.com/graphql\"",
+        "headers": {
+          "Accept": "\"application/vnd.github+json\"",
+          "X-GitHub-Api-Version": "\"2022-11-28\"",
+          "User-Agent": "\"initiative-github\""
+        },
+        "graphql": {
+          "query": "query Search($query: String!, $first: Int!) { search(query: $query, type: ISSUE, first: $first) { issueCount nodes { ... on PullRequest { number title url state createdAt updatedAt closedAt } } } }",
+          "variables": "{\"query\": \"is:pr is:open author:@me archived:false sort:created-desc\", \"first\": ($exists(params.limit) ? $min([$max([params.limit, 1]), 100]) : 30)}"
+        },
+        "connection": "account"
+      },
+      "errors": [
+        {
+          "status": 403,
+          "when": "$exists(response.headers.\"retry-after\") or response.headers.\"x-ratelimit-remaining\" = \"0\"",
+          "code": "transient"
+        },
+        {
+          "status": "2xx",
+          "when": "response.body.errors[type = \"RATE_LIMITED\"]",
+          "code": "transient"
+        },
+        {
+          "status": "2xx",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
+          "code": "not-authorized"
+        },
+        {
+          "status": "2xx",
+          "when": "response.body.errors and $not($exists(response.body.data) and $boolean(response.body.data))",
+          "code": "invalid"
+        }
+      ],
+      "map": "(\n  $search := response.body.data.search;\n  (\n    $rows := $search.nodes[$type($) = \"object\"];\n    {\n      \"numbers\": [$rows.(number ? number : 0)],\n      \"titles\": [$rows.(title ? title : \"\")],\n      \"urls\": [$rows.(url ? url : \"\")],\n      \"states\": [$rows.(state ? $lowercase(state) : \"\")],\n      \"created_at\": [$rows.(createdAt ? createdAt : \"\")],\n      \"updated_at\": [$rows.(updatedAt ? updatedAt : \"\")],\n      \"closed_at\": [$rows.(closedAt ? closedAt : \"\")],\n      \"count\": $count($rows),\n      \"total\": $search.issueCount\n    }\n  )\n)"
+    },
+    {
       "id": "plugin.beyonders-studio.github.open-issue",
       "direction": "write",
       "label": {
@@ -4939,7 +5390,7 @@
       "endpoints": [
         "plugin.beyonders-studio.github.review-queue"
       ],
-      "module_source": "(() => {\n  // src/widgets/missing.ts\n  var WHY = {\n    \"repository-required\": \"Choose a repository for this tile\",\n    \"not-found\": \"That repository is not there, or not visible to the plug-in\",\n    \"not-authorized\": \"The organization has not granted the plug-in this\"\n  };\n  function missing(values) {\n    const why = values.unavailable;\n    if (!why) return null;\n    return { v: 1, scene: { kind: \"empty\", message: WHY[why] || \"There is nothing to show\" } };\n  }\n\n  // src/widgets/review-queue.ts\n  function render(data) {\n    const nothing = missing(data.values);\n    if (nothing) return nothing;\n    if (!data.rows.length) return { v: 1, scene: { kind: \"empty\", message: \"Nothing is waiting on you\" } };\n    return {\n      v: 1,\n      scene: {\n        kind: \"table\",\n        columns: [\n          { key: \"number\", label: \"#\", align: \"end\" },\n          { key: \"title\", label: \"Pull request\" }\n        ],\n        rows: data.rows.slice(0, 10).map((row) => ({ number: row.numbers || \"\", title: row.titles || \"\" }))\n      }\n    };\n  }\n\n  // widget.js\n  globalThis.render = render;\n})();",
+      "module_source": "(() => {\n  // src/widgets/missing.ts\n  var WHY = {\n    \"repository-required\": \"Choose a repository for this tile\",\n    \"not-found\": \"That repository is not there, or not visible to the plug-in\",\n    \"not-authorized\": \"The organization has not granted the plug-in this\"\n  };\n  function missing(values) {\n    const why = values.unavailable;\n    if (!why) return null;\n    return { v: 1, scene: { kind: \"empty\", message: WHY[why] || \"There is nothing to show\" } };\n  }\n\n  // src/widgets/pull-table.ts\n  var repositoryOf = (url) => (url ?? \"\").split(\"/\").slice(3, 5).join(\"/\");\n  function pullTable(data, empty, repositories = false) {\n    const nothing = missing(data.values);\n    if (nothing) return nothing;\n    if (!data.rows.length) return { v: 1, scene: { kind: \"empty\", message: empty } };\n    return {\n      v: 1,\n      scene: {\n        kind: \"table\",\n        columns: [\n          { key: \"number\", label: \"#\", align: \"end\" },\n          { key: \"title\", label: \"Pull request\" },\n          ...repositories ? [{ key: \"repository\", label: \"Repository\" }] : []\n        ],\n        rows: data.rows.slice(0, 10).map((row) => ({\n          number: row.numbers || \"\",\n          title: row.titles || \"\",\n          ...repositories ? { repository: repositoryOf(row.urls) } : {}\n        }))\n      }\n    };\n  }\n\n  // src/widgets/review-queue.ts\n  function render(data) {\n    return pullTable(data, \"Nothing is waiting on you\");\n  }\n\n  // widget.js\n  globalThis.render = render;\n})();",
       "sample_data": {
         "plugin.beyonders-studio.github.review-queue": {
           "numbers": [
@@ -4962,6 +5413,146 @@
         "all_of": [
           "workspace",
           "account"
+        ]
+      }
+    },
+    {
+      "id": "my-review-requests",
+      "meta": {
+        "name": {
+          "en": "Your review requests",
+          "de": "Deine Review-Anfragen",
+          "es": "Tus solicitudes de revisión",
+          "fr": "Vos demandes de revue"
+        },
+        "description": {
+          "en": "Open pull requests that asked for your review, across repositories, from your own GitHub account.",
+          "de": "Offene Pull Requests, die deine Review angefragt haben, über Repositories hinweg, aus deinem eigenen GitHub-Konto.",
+          "es": "Pull requests abiertas que pidieron tu revisión, en todos los repositorios, desde tu propia cuenta de GitHub.",
+          "fr": "Pull requests ouvertes qui ont demandé votre revue, dans tous les dépôts, depuis votre propre compte GitHub."
+        }
+      },
+      "endpoints": [
+        "plugin.beyonders-studio.github.my-review-requests"
+      ],
+      "module_source": "(() => {\n  // src/widgets/missing.ts\n  var WHY = {\n    \"repository-required\": \"Choose a repository for this tile\",\n    \"not-found\": \"That repository is not there, or not visible to the plug-in\",\n    \"not-authorized\": \"The organization has not granted the plug-in this\"\n  };\n  function missing(values) {\n    const why = values.unavailable;\n    if (!why) return null;\n    return { v: 1, scene: { kind: \"empty\", message: WHY[why] || \"There is nothing to show\" } };\n  }\n\n  // src/widgets/pull-table.ts\n  var repositoryOf = (url) => (url ?? \"\").split(\"/\").slice(3, 5).join(\"/\");\n  function pullTable(data, empty, repositories = false) {\n    const nothing = missing(data.values);\n    if (nothing) return nothing;\n    if (!data.rows.length) return { v: 1, scene: { kind: \"empty\", message: empty } };\n    return {\n      v: 1,\n      scene: {\n        kind: \"table\",\n        columns: [\n          { key: \"number\", label: \"#\", align: \"end\" },\n          { key: \"title\", label: \"Pull request\" },\n          ...repositories ? [{ key: \"repository\", label: \"Repository\" }] : []\n        ],\n        rows: data.rows.slice(0, 10).map((row) => ({\n          number: row.numbers || \"\",\n          title: row.titles || \"\",\n          ...repositories ? { repository: repositoryOf(row.urls) } : {}\n        }))\n      }\n    };\n  }\n\n  // src/widgets/my-review-requests.ts\n  function render(data) {\n    return pullTable(data, \"Nothing is waiting on your review\", true);\n  }\n\n  // widget.js\n  globalThis.render = render;\n})();",
+      "sample_data": {
+        "plugin.beyonders-studio.github.my-review-requests": {
+          "numbers": [
+            812,
+            57
+          ],
+          "titles": [
+            "Cache the issue counts",
+            "Retry a webhook delivery"
+          ],
+          "urls": [
+            "https://github.com/acme/widgets/pull/812",
+            "https://github.com/acme/gadgets/pull/57"
+          ],
+          "count": 2,
+          "total": 2
+        }
+      },
+      "requires": {
+        "all_of": [
+          "account"
+        ]
+      }
+    },
+    {
+      "id": "my-pull-requests",
+      "meta": {
+        "name": {
+          "en": "Your pull requests",
+          "de": "Deine Pull Requests",
+          "es": "Tus pull requests",
+          "fr": "Vos pull requests"
+        },
+        "description": {
+          "en": "Your open pull requests, across repositories, from your own GitHub account.",
+          "de": "Deine offenen Pull Requests, über Repositories hinweg, aus deinem eigenen GitHub-Konto.",
+          "es": "Tus pull requests abiertas, en todos los repositorios, desde tu propia cuenta de GitHub.",
+          "fr": "Vos pull requests ouvertes, dans tous les dépôts, depuis votre propre compte GitHub."
+        }
+      },
+      "endpoints": [
+        "plugin.beyonders-studio.github.my-pull-requests"
+      ],
+      "module_source": "(() => {\n  // src/widgets/missing.ts\n  var WHY = {\n    \"repository-required\": \"Choose a repository for this tile\",\n    \"not-found\": \"That repository is not there, or not visible to the plug-in\",\n    \"not-authorized\": \"The organization has not granted the plug-in this\"\n  };\n  function missing(values) {\n    const why = values.unavailable;\n    if (!why) return null;\n    return { v: 1, scene: { kind: \"empty\", message: WHY[why] || \"There is nothing to show\" } };\n  }\n\n  // src/widgets/pull-table.ts\n  var repositoryOf = (url) => (url ?? \"\").split(\"/\").slice(3, 5).join(\"/\");\n  function pullTable(data, empty, repositories = false) {\n    const nothing = missing(data.values);\n    if (nothing) return nothing;\n    if (!data.rows.length) return { v: 1, scene: { kind: \"empty\", message: empty } };\n    return {\n      v: 1,\n      scene: {\n        kind: \"table\",\n        columns: [\n          { key: \"number\", label: \"#\", align: \"end\" },\n          { key: \"title\", label: \"Pull request\" },\n          ...repositories ? [{ key: \"repository\", label: \"Repository\" }] : []\n        ],\n        rows: data.rows.slice(0, 10).map((row) => ({\n          number: row.numbers || \"\",\n          title: row.titles || \"\",\n          ...repositories ? { repository: repositoryOf(row.urls) } : {}\n        }))\n      }\n    };\n  }\n\n  // src/widgets/my-pull-requests.ts\n  function render(data) {\n    return pullTable(data, \"You have no open pull requests\", true);\n  }\n\n  // widget.js\n  globalThis.render = render;\n})();",
+      "sample_data": {
+        "plugin.beyonders-studio.github.my-pull-requests": {
+          "numbers": [
+            815
+          ],
+          "titles": [
+            "Draw the review load"
+          ],
+          "urls": [
+            "https://github.com/acme/widgets/pull/815"
+          ],
+          "count": 1,
+          "total": 1
+        }
+      },
+      "requires": {
+        "all_of": [
+          "account"
+        ]
+      }
+    },
+    {
+      "id": "linked-pull-requests",
+      "meta": {
+        "name": {
+          "en": "Linked pull requests",
+          "de": "Verknüpfte Pull Requests",
+          "es": "Pull requests vinculadas",
+          "fr": "Pull requests liées"
+        },
+        "description": {
+          "en": "The organization's open pull requests that name a task, with the task each names.",
+          "de": "Die offenen Pull Requests der Organisation, die eine Aufgabe nennen, mit der Aufgabe, die jeder nennt.",
+          "es": "Las pull requests abiertas de la organización que nombran una tarea, con la tarea que nombra cada una.",
+          "fr": "Les pull requests ouvertes de l'organisation qui nomment une tâche, avec la tâche que chacune nomme."
+        }
+      },
+      "endpoints": [
+        "plugin.beyonders-studio.github.linked-work"
+      ],
+      "module_source": "(() => {\n  // src/widgets/missing.ts\n  var WHY = {\n    \"repository-required\": \"Choose a repository for this tile\",\n    \"not-found\": \"That repository is not there, or not visible to the plug-in\",\n    \"not-authorized\": \"The organization has not granted the plug-in this\"\n  };\n  function missing(values) {\n    const why = values.unavailable;\n    if (!why) return null;\n    return { v: 1, scene: { kind: \"empty\", message: WHY[why] || \"There is nothing to show\" } };\n  }\n\n  // src/widgets/linked-pull-requests.ts\n  function render(data) {\n    const nothing = missing(data.values);\n    if (nothing) return nothing;\n    if (!data.rows.length) return { v: 1, scene: { kind: \"empty\", message: \"No open pull request names a task\" } };\n    return {\n      v: 1,\n      scene: {\n        kind: \"table\",\n        columns: [\n          { key: \"task\", label: \"Task\" },\n          { key: \"number\", label: \"#\", align: \"end\" },\n          { key: \"title\", label: \"Pull request\" },\n          { key: \"repository\", label: \"Repository\" }\n        ],\n        rows: data.rows.slice(0, 10).map((row) => ({\n          task: row.references || \"\",\n          number: row.numbers || \"\",\n          title: row.titles || \"\",\n          repository: row.repositories || \"\"\n        }))\n      }\n    };\n  }\n\n  // widget.js\n  globalThis.render = render;\n})();",
+      "sample_data": {
+        "plugin.beyonders-studio.github.linked-work": {
+          "tasks": [
+            42,
+            57
+          ],
+          "references": [
+            "acme-42",
+            "acme-57"
+          ],
+          "repositories": [
+            "acme/widgets",
+            "acme/gadgets"
+          ],
+          "numbers": [
+            812,
+            77
+          ],
+          "titles": [
+            "Fix sign-in on the mobile app",
+            "Cache the issue counts"
+          ],
+          "urls": [
+            "#",
+            "#"
+          ],
+          "count": 2
+        }
+      },
+      "requires": {
+        "all_of": [
+          "workspace"
         ]
       }
     },

@@ -20,11 +20,15 @@ const HEADERS = {
   "User-Agent": "initiative-github",
 };
 
+/** The install's prefix, `acme`, and the one it had before, `old`. */
+const INSTALL = { settings: { task_prefix: "acme" }, aliases: { task_prefix: ["old"] } };
+
 /** One endpoint, called with `params`, answered in turn by each recorded body or answer. */
 function call(name: string, params: Record<string, unknown>, ...answers: Array<string | RecordedResponse>) {
   return runEndpoint(plugin, name, {
     params,
     connections: CONNECTIONS,
+    ...INSTALL,
     now: NOW,
     responses: answers.map((answer) => (typeof answer === "string" ? { body: recorded(answer) } : answer)),
   });
@@ -47,6 +51,9 @@ const ROW = {
   updated_at: ["2026-09-02T00:00:00Z"],
   closed_at: [""],
 };
+
+/** The pull request GitHub's recorded search answers, as every search for pull requests answers it. */
+const PULL_ROW = { ...ROW, numbers: [9], titles: ["Fix the build"], urls: ["https://github.com/acme/widgets/pull/9"], count: 1, total: 1 };
 
 const READS: ReadCase[] = [
   {
@@ -148,18 +155,10 @@ const READS: ReadCase[] = [
       checks: "passing",
     },
   },
-  {
-    name: READ.findPullRequests,
-    params: { repo: "widgets" },
-    answers: ["graphql/search"],
-    result: { ...ROW, numbers: [9], titles: ["Fix the build"], urls: ["https://github.com/acme/widgets/pull/9"], count: 1, total: 1 },
-  },
-  {
-    name: READ.reviewQueue,
-    params: { repo: "widgets" },
-    answers: ["graphql/search"],
-    result: { ...ROW, numbers: [9], titles: ["Fix the build"], urls: ["https://github.com/acme/widgets/pull/9"], count: 1, total: 1 },
-  },
+  { name: READ.findPullRequests, params: { repo: "widgets" }, answers: ["graphql/search"], result: PULL_ROW },
+  { name: READ.reviewQueue, params: { repo: "widgets" }, answers: ["graphql/search"], result: PULL_ROW },
+  { name: READ.myReviewRequests, params: {}, answers: ["graphql/search"], result: PULL_ROW },
+  { name: READ.myPullRequests, params: {}, answers: ["graphql/search"], result: PULL_ROW },
   {
     name: READ.listAlerts,
     params: { repo: "widgets" },
@@ -229,6 +228,27 @@ const READS: ReadCase[] = [
       total: 4,
     },
   },
+  {
+    // #9 is found by both searches and listed once for each task it names;
+    // old-7 names a task by the earlier prefix.
+    name: READ.linkedWork,
+    params: {},
+    answers: ["graphql/linked-work"],
+    result: {
+      tasks: [42, 57, 7, 61],
+      references: ["acme-42", "acme-57", "acme-7", "acme-61"],
+      repositories: ["acme/widgets", "acme/widgets", "acme/Gadgets", "acme/widgets"],
+      numbers: [9, 9, 12, 13],
+      titles: ["Fix sign-in (acme-42)", "Fix sign-in (acme-42)", "Finish the acme migration", "Cache the issue counts"],
+      urls: [
+        "https://github.com/acme/widgets/pull/9",
+        "https://github.com/acme/widgets/pull/9",
+        "https://github.com/acme/Gadgets/pull/12",
+        "https://github.com/acme/widgets/pull/13",
+      ],
+      count: 4,
+    },
+  },
 ];
 
 /** GitHub's answer with a pull request's checks withheld: the field refused, the rest answered. */
@@ -245,7 +265,7 @@ function unchecked(name: string, nodes: (data: any) => any[]): any {
 }
 
 describe("reads", () => {
-  it("covers all sixteen", () => {
+  it("covers all nineteen", () => {
     expect(READS.map((one) => one.name).sort()).toEqual(Object.values(READ).sort());
   });
 
@@ -366,12 +386,60 @@ describe("reads", () => {
     });
   });
 
+  it("asks for the member's own review requests and pull requests with their account alone, naming no organization", async () => {
+    const mine = (name: string, params: Record<string, unknown>) =>
+      runEndpoint(plugin, name, { params, connections: { account: {} }, now: NOW, responses: [{ body: recorded("graphql/search") }] });
+    for (const [name, asked] of [
+      [READ.myReviewRequests, "review-requested:@me"],
+      [READ.myPullRequests, "author:@me"],
+    ]) {
+      const run = await mine(name, { limit: 10 });
+      expect(run.requests.map((request) => [request.method, request.url, request.connection])).toEqual([["POST", `${API}/graphql`, "account"]]);
+      expect(variables(run)).toEqual({ query: `is:pr is:open ${asked} archived:false sort:created-desc`, first: 10 });
+      expect(run).toMatchObject({ result: PULL_ROW });
+      expect(variables(await mine(name, {})).first).toBe(30);
+    }
+  });
+
   it("asks for the organization's pull requests changed since a time, a day back unless it says", async () => {
     const since = await call(READ.recentlyUpdated, { since: "2026-10-01T11:00:00Z" }, "graphql/recently-updated");
     expect(since.requests[0].connection).toBe("workspace");
     expect(variables(since)).toEqual({ query: "type:pr org:acme updated:>=2026-10-01T11:00:00+00:00 sort:updated-desc", first: 100 });
     const unsaid = await call(READ.recentlyUpdated, {}, "graphql/recently-updated");
     expect(variables(unsaid).query).toBe("type:pr org:acme updated:>=2026-09-30T12:00:00+00:00 sort:updated-desc");
+  });
+
+  it("searches the organization for the prefix as a word and for branches beginning with it, and lists nothing without one", async () => {
+    const linked = (settings: Record<string, string>, workspace: Record<string, unknown> = CONNECTIONS.workspace) =>
+      runEndpoint(plugin, READ.linkedWork, { connections: { workspace }, settings, now: NOW, responses: [{ body: recorded("graphql/linked-work") }] });
+    const run = await linked(INSTALL.settings);
+    expect(run.requests[0].connection).toBe("workspace");
+    expect(variables(run)).toEqual({
+      named: '"acme" type:pr is:open org:acme sort:updated-desc',
+      branched: "head:acme type:pr is:open org:acme sort:updated-desc",
+      first: 50,
+    });
+    const personal = await linked(INSTALL.settings, { owner: "alice", installation_id: 43, owner_type: "User" });
+    expect(variables(personal).branched).toBe("head:acme type:pr is:open user:alice sort:updated-desc");
+    // No prefix, or one Initiative could not hold: GitHub is asked for one pull request, and none is listed.
+    for (const settings of [{}, { task_prefix: 'acme" org:other' }] as Array<Record<string, string>>) {
+      const none = await linked(settings);
+      expect(variables(none)).toEqual({
+        named: "type:pr is:open org:acme sort:updated-desc",
+        branched: "type:pr is:open org:acme sort:updated-desc",
+        first: 1,
+      });
+      expect(none).toMatchObject({ result: { tasks: [], references: [], numbers: [], count: 0 } });
+    }
+  });
+
+  it("lists no pull request that only nearly names a task", async () => {
+    // acme-ui, xacme-42, acme-420x, acme-0, "acme 42" and a branch named acme-tools.
+    const answer = recorded("graphql/linked-work");
+    for (const search of [answer.data.named, answer.data.branched]) {
+      search.nodes = search.nodes.filter((node: { number?: number }) => [10, 11, 14].includes(node.number!));
+    }
+    expect(await call(READ.linkedWork, {}, { body: answer })).toMatchObject({ result: { tasks: [], count: 0 } });
   });
 
   it("answers what it can of a pull request whose checks GitHub withholds", async () => {

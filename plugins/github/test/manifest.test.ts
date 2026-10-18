@@ -57,10 +57,10 @@ describe("manifest", () => {
     expect(validateManifest(manifest)).toEqual([]);
   });
 
-  it("declares sixteen reads, eight writes and six announcements", () => {
+  it("declares nineteen reads, eight writes and six announcements", () => {
     const counts: Record<string, number> = {};
     for (const endpoint of manifest.endpoints ?? []) counts[endpoint.direction] = (counts[endpoint.direction] ?? 0) + 1;
-    expect(counts).toEqual({ read: 16, write: 8, emit: 6 });
+    expect(counts).toEqual({ read: 19, write: 8, emit: 6 });
   });
 
   it("is declarative: Initiative calls GitHub itself, runs no service, and keeps links on the tasks it may read", () => {
@@ -92,7 +92,14 @@ describe("manifest", () => {
       ({ id, direction, params, returns, public: open, actors, identity });
     const before = unprefixed(service.endpoints!.map(terms));
     const after = unprefixed(manifest.endpoints!.map(terms));
-    const added = [READ.reviewQueue, READ.recentlyUpdated, WRITE.startBranch] as string[];
+    const added = [
+      READ.reviewQueue,
+      READ.recentlyUpdated,
+      READ.linkedWork,
+      READ.myReviewRequests,
+      READ.myPullRequests,
+      WRITE.startBranch,
+    ] as string[];
     const said = (value: { key: string }) => ["review", "checks"].includes(value.key);
     const kept = after
       .filter((endpoint) => !added.includes(endpoint.id))
@@ -151,6 +158,7 @@ describe("manifest", () => {
   });
 
   it("offers every read and write to other plug-ins but the task's own Start a branch, and no announcement", () => {
+    const members = [READ_IDS.reviewQueue, READ_IDS.myReviewRequests, READ_IDS.myPullRequests];
     for (const endpoint of manifest.endpoints ?? []) {
       // Start a branch names the branch after the task its action runs on.
       if (endpoint.direction === "emit" || endpoint.id === declare(WRITE.startBranch)) {
@@ -159,10 +167,31 @@ describe("manifest", () => {
       }
       expect(endpoint.public).toBe(true);
       expect(endpoint.admin_only).toBeUndefined();
-      if (endpoint.direction === "read" && endpoint.id !== READ_IDS.reviewQueue) {
+      if (endpoint.direction === "read" && !members.includes(endpoint.id)) {
         expect(endpoint.actors).toEqual(["installation", "member"]);
         expect(endpoint.requires).toEqual({ all_of: ["workspace"] });
       }
+    }
+  });
+
+  it("reads a member's own review requests and pull requests with their account alone, in any community", () => {
+    for (const name of [READ.myReviewRequests, READ.myPullRequests]) {
+      const endpoint = manifest.endpoints!.find((one) => one.id === declare(name))!;
+      expect(endpoint).toMatchObject({ actors: ["member"], requires: { all_of: [ACCOUNT] }, request: { connection: ACCOUNT } });
+      // Its widget is offered to whoever has connected their account, organization or not.
+      expect(manifest.widgets!.find((widget) => widget.id === name)).toMatchObject({
+        endpoints: [endpoint.id],
+        requires: { all_of: [ACCOUNT] },
+      });
+    }
+  });
+
+  it("only reads as the organization's installation, which its tokens are asked for", () => {
+    const requests = (manifest.endpoints ?? []).flatMap((endpoint) => endpoint.steps?.map((step) => step.request) ?? [endpoint.request!]);
+    const installation = requests.filter((request) => request?.connection === WORKSPACE);
+    expect(installation.length).toBeGreaterThan(0);
+    for (const request of installation) {
+      expect(request.method === "GET" || request.graphql?.query.startsWith("query "), request.url).toBe(true);
     }
   });
 
@@ -201,9 +230,23 @@ describe("manifest", () => {
       after_connect: { code: "installation-not-held" },
     });
     expect(workspace.flow!.revoke).toBeUndefined();
+    // Every installation token is asked for reading alone: no call the plug-in
+    // makes as the installation writes.
     expect(workspace.token).toEqual({
       type: "jwt_bearer",
       exchange_url: "https://api.github.com/app/installations/{installation_id}/access_tokens",
+      exchange_body: {
+        permissions: {
+          issues: "read",
+          pull_requests: "read",
+          contents: "read",
+          checks: "read",
+          statuses: "read",
+          vulnerability_alerts: "read",
+          organization_projects: "read",
+          metadata: "read",
+        },
+      },
       iss: "{vendor.app_id}",
       key: "{vendor.private_key}",
       alg: "RS256",

@@ -45,6 +45,9 @@ export const READ = {
   listProjectOptions: "list-project-options",
   findProjectItem: "find-project-item",
   recentlyUpdated: "recently-updated",
+  linkedWork: "linked-work",
+  myReviewRequests: "my-review-requests",
+  myPullRequests: "my-pull-requests",
 } as const;
 
 export const WRITE = {

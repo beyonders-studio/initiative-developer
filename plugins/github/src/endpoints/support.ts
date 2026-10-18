@@ -86,6 +86,17 @@ export const PUBLIC_READ = {
 } satisfies Pick<Endpoint, "public" | "actors" | "requires">;
 
 /**
+ * A read about one member, which other plug-ins may call as that member. It
+ * runs on their own GitHub account alone and names no organization, so a
+ * community offers it whether or not it has connected one.
+ */
+export const PERSONAL_READ = {
+  public: true,
+  actors: ["member"],
+  requires: { all_of: [ACCOUNT] },
+} satisfies Pick<Endpoint, "public" | "actors" | "requires">;
+
+/**
  * A write other plug-ins may call through Initiative, as one of the community's
  * members only: it runs on that member's own GitHub account.
  */

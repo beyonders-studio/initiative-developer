@@ -1,0 +1,66 @@
+{
+  "data": {
+    "named": {
+      "nodes": [
+        {
+          "number": 9,
+          "title": "Fix sign-in (acme-42)",
+          "url": "https://github.com/acme/widgets/pull/9",
+          "headRefName": "acme-42-fix-sign-in",
+          "repository": { "nameWithOwner": "acme/widgets" },
+          "body": "Also touches ACME-57."
+        },
+        {
+          "number": 10,
+          "title": "Bump acme-ui from 1.9 to 2.0",
+          "url": "https://github.com/acme/widgets/pull/10",
+          "headRefName": "dependabot/npm_and_yarn/acme-ui-2.0",
+          "repository": { "nameWithOwner": "acme/widgets" },
+          "body": "Bumps acme-ui from 1.9 to 2.0."
+        },
+        {
+          "number": 11,
+          "title": "Rename the xacme-42 helper",
+          "url": "https://github.com/acme/Gadgets/pull/11",
+          "headRefName": "rename-helper",
+          "repository": { "nameWithOwner": "acme/Gadgets" },
+          "body": "Not acme-420x, acme-0 or acme 42."
+        },
+        {
+          "number": 12,
+          "title": "Finish the acme migration",
+          "url": "https://github.com/acme/Gadgets/pull/12",
+          "headRefName": "migration",
+          "repository": { "nameWithOwner": "acme/Gadgets" },
+          "body": "Continues old-7."
+        },
+        {}
+      ]
+    },
+    "branched": {
+      "nodes": [
+        {
+          "number": 9,
+          "title": "Fix sign-in (acme-42)",
+          "url": "https://github.com/acme/widgets/pull/9",
+          "headRefName": "acme-42-fix-sign-in",
+          "repository": { "nameWithOwner": "acme/widgets" }
+        },
+        {
+          "number": 13,
+          "title": "Cache the issue counts",
+          "url": "https://github.com/acme/widgets/pull/13",
+          "headRefName": "acme-61-cache-counts",
+          "repository": { "nameWithOwner": "acme/widgets" }
+        },
+        {
+          "number": 14,
+          "title": "Add the tools page",
+          "url": "https://github.com/acme/widgets/pull/14",
+          "headRefName": "acme-tools",
+          "repository": { "nameWithOwner": "acme/widgets" }
+        }
+      ]
+    }
+  }
+}
