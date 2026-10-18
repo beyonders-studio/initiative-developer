@@ -8,8 +8,9 @@
 
 import { defineEndpoint, type EmittedEndpoint, type Expression } from "initiative-plugin-sdk/manifest";
 
+import { REFRESH_PULL_REQUEST } from "../linking.js";
 import { EMIT, ISSUE_IDENTITY, many, out, RELEASE_IDENTITY, TAG_IDENTITY, text } from "../vocabulary.js";
-import { quote, TEXT } from "./support.js";
+import { delivery, TEXT } from "./support.js";
 
 const SUBJECT = {
   repository: out("string"),
@@ -54,11 +55,9 @@ interface Announcement {
   when: Expression;
   /** Its payload. */
   map: Expression;
+  /** What the same deliveries change of the links tasks hold, when they change any. */
+  write?: Expression;
 }
-
-/** A delivery of one GitHub event, with one `action`. */
-const delivery = (event: string, action?: string): Expression =>
-  `headers."x-github-event" = ${quote(event)}${action ? ` and payload.action = ${quote(action)}` : ""}`;
 
 /** Text that is there. */
 const named = (path: string): Expression => `($type(${path}) = "string" and ${path} != "")`;
@@ -145,6 +144,9 @@ export const ANNOUNCEMENTS = {
         ? payload.requested_reviewer.login
         : $text(payload.requested_team.slug)`
     ),
+    // The pull request changed: its links are refreshed by this row, which
+    // the pull request rows after it never see.
+    write: REFRESH_PULL_REQUEST,
     declaration: defineEndpoint({
       direction: "emit",
       label: text("A review was requested", "Eine Review wurde angefragt", "Se solicitó una revisión", "Une revue a été demandée"),
@@ -241,8 +243,9 @@ export const EMIT_ENDPOINTS = Object.fromEntries(
 ) as { [K in keyof typeof ANNOUNCEMENTS]: (typeof ANNOUNCEMENTS)[K]["declaration"] };
 
 /** What GitHub's deliveries announce: the first row whose `when` holds. */
-export const EVENTS = Object.entries(ANNOUNCEMENTS).map(([emit, announcement]) => ({
+export const EVENTS = Object.entries(ANNOUNCEMENTS).map(([emit, announcement]: [string, Announcement]) => ({
   when: announcement.when,
   emit: emit as keyof typeof ANNOUNCEMENTS,
   map: announcement.map,
+  ...(announcement.write ? { write: announcement.write } : {}),
 }));

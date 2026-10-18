@@ -44,6 +44,7 @@ export const READ = {
   listProjectFields: "list-project-fields",
   listProjectOptions: "list-project-options",
   findProjectItem: "find-project-item",
+  recentlyUpdated: "recently-updated",
 } as const;
 
 export const WRITE = {
@@ -54,6 +55,7 @@ export const WRITE = {
   label: "label",
   requestReview: "request-review",
   moveProjectItem: "move-project-item",
+  startBranch: "start-branch",
 } as const;
 
 export const EMIT = {
@@ -66,6 +68,22 @@ export const EMIT = {
 } as const;
 
 export const READ_IDS = ids(READ);
+
+/** What a task holds of GitHub's: the values Initiative keeps for the plug-in, by metadata key. */
+export const FIELD = {
+  pullRequests: "github.pull_requests",
+  branches: "github.branches",
+} as const;
+
+/** The install's own setting: the prefix a task's reference starts with, such as `acme` in `acme-42`. */
+export const TASK_PREFIX = "task_prefix";
+
+/** What a reader runs on a task. */
+export const ACTION = {
+  startBranch: "start-branch",
+  linkPullRequest: "link-pull-request",
+  unlink: "unlink",
+} as const;
 
 export function text(en: string, de: string, es: string, fr: string): LocalizedText {
   return { en, de, es, fr };
@@ -189,6 +207,11 @@ export const COUNT_OUT = { count: out("int", { label: text("How many", "Wie viel
 export const TOTAL_OUT = {
   total: out("int", { label: text("How many in all", "Wie viele insgesamt", "Cuántos en total", "Combien en tout") }),
 };
+
+/** A pull request's three facets, as its links and the reads that answer them name each. */
+export const STATUS_LABEL = text("Status", "Status", "Estado", "État");
+export const REVIEW_LABEL = text("Review", "Review", "Revisión", "Revue");
+export const CHECKS_LABEL = text("Checks", "Checks", "Comprobaciones", "Vérifications");
 
 /** Why a read has no answer, in a code a widget can put into words. */
 export const UNAVAILABLE = {

@@ -13,10 +13,11 @@ import { definePlugin, type ConnectionFlow, type GithubPermissionLevel, type Pag
 import { EMIT_ENDPOINTS, EVENTS } from "./endpoints/emissions.js";
 import { closeIssue, comment, findIssues, getIssue, label, listLabels, listMilestones, openIssue, reopenIssue } from "./endpoints/issues.js";
 import { findProjectItem, listProjectFields, listProjectOptions, listProjects, moveProjectItem } from "./endpoints/projects.js";
-import { findPullRequests, getPullRequest, requestReview, reviewQueue } from "./endpoints/pulls.js";
-import { listAssignees, listBranches, listRepositories } from "./endpoints/repositories.js";
+import { findPullRequests, getPullRequest, recentlyUpdated, requestReview, reviewQueue } from "./endpoints/pulls.js";
+import { listAssignees, listBranches, listRepositories, startBranch } from "./endpoints/repositories.js";
 import { listAlerts } from "./endpoints/security.js";
 import { API, quote, rest, WEB } from "./endpoints/support.js";
+import { ACTIONS, FIELDS, HELP, LINK_EVENTS, PARTS, SCHEDULES, SETTINGS } from "./linking.js";
 import { ACCOUNT, DASHBOARD_UID, LISTING_UID, PUBLIC_ID, READ, text, WORKSPACE, WRITE } from "./vocabulary.js";
 
 /**
@@ -27,14 +28,19 @@ import { ACCOUNT, DASHBOARD_UID, LISTING_UID, PUBLIC_ID, READ, text, WORKSPACE, 
 const PERMISSIONS: Readonly<Record<string, GithubPermissionLevel>> = {
   issues: "write",
   pull_requests: "write",
-  contents: "read",
+  // Write, for Start a branch, which a member's own token makes.
+  contents: "write",
+  // A linked pull request's checks: check suites and runs, and commit
+  // statuses, which GitHub sums up together.
+  checks: "read",
+  statuses: "read",
   vulnerability_alerts: "read",
   organization_projects: "write",
   metadata: "read",
 };
 
 /** The webhook events the GitHub App registration subscribes to. */
-const WEBHOOK_EVENTS = ["issues", "pull_request", "release", "create"];
+const WEBHOOK_EVENTS = ["issues", "pull_request", "release", "create", "delete", "pull_request_review", "check_suite"];
 
 /** GitHub's user authorization for the GitHub App, which both connections run. */
 const GITHUB_OAUTH: ConnectionFlow = {
@@ -69,6 +75,10 @@ export default definePlugin({
   // against. A deployment serving another major, or an older minor, refuses it.
   minPluginApi: "6.0",
   hosts: ["api.github.com"],
+  // The plug-in keeps its links on tasks, which Initiative allows on the
+  // tasks the install can read.
+  scopes: ["projects:read"],
+  settings: SETTINGS,
 
   // What the operator supplies once per deployment for the GitHub App: the
   // flows, the installation token and the webhooks below name them as
@@ -167,6 +177,15 @@ export default definePlugin({
           managed: true,
           label: text("Installation", "Installation", "Instalación", "Installation"),
         },
+        // GitHub's word for the account, "Organization" or "User", which
+        // GitHub's search names differently. An installation connected before
+        // it was kept has none, and is searched as an organization's.
+        {
+          key: "owner_type",
+          type: "string",
+          managed: true,
+          label: text("Account type", "Kontotyp", "Tipo de cuenta", "Type de compte"),
+        },
       ],
       flow: {
         ...GITHUB_OAUTH,
@@ -194,7 +213,9 @@ export default definePlugin({
             $controls := $account.type = "Organization"
               ? $exists(steps.memberships.body[organization.id = $account.id and state = "active" and role = "admin"])
               : $account.type = "User" and $account.id = steps.user.body.id;
-            $controls ? {"values": {"owner": $account.login, "installation_id": $held.id}, "account_label": $account.login} : {}
+            $controls
+              ? {"values": {"owner": $account.login, "installation_id": $held.id, "owner_type": $account.type}, "account_label": $account.login}
+              : {}
           )`,
           refuse_when: "$not($exists(result.values.owner) and $exists(result.values.installation_id))",
           code: "installation-not-held",
@@ -241,8 +262,8 @@ export default definePlugin({
 
   // Initiative receives the GitHub App's webhook deliveries, checks them, and
   // for every community whose organization connection holds the installation
-  // a delivery came from, announces what it says and notes the installation
-  // being removed, suspended or restored.
+  // a delivery came from, announces what it says, keeps the links tasks hold
+  // current, and notes the installation being removed, suspended or restored.
   webhooks: {
     verify: {
       scheme: "hmac_sha256",
@@ -253,7 +274,9 @@ export default definePlugin({
     },
     dedup: "X-GitHub-Delivery",
     route: { path: "installation.id", connection: WORKSPACE, field: "installation_id" },
-    events: EVENTS,
+    // The announcements first: the first row whose `when` holds is the only
+    // one that applies, and a review request's row refreshes links itself.
+    events: [...EVENTS, ...LINK_EVENTS],
     status: [
       { when: installation("deleted"), connection: WORKSPACE, state: "removed" },
       { when: installation("suspend"), connection: WORKSPACE, state: "suspended" },
@@ -277,6 +300,7 @@ export default definePlugin({
     [READ.listProjectFields]: listProjectFields,
     [READ.listProjectOptions]: listProjectOptions,
     [READ.findProjectItem]: findProjectItem,
+    [READ.recentlyUpdated]: recentlyUpdated,
     [WRITE.openIssue]: openIssue,
     [WRITE.comment]: comment,
     [WRITE.closeIssue]: closeIssue,
@@ -284,8 +308,16 @@ export default definePlugin({
     [WRITE.label]: label,
     [WRITE.requestReview]: requestReview,
     [WRITE.moveProjectItem]: moveProjectItem,
+    [WRITE.startBranch]: startBranch,
     ...EMIT_ENDPOINTS,
   },
+
+  // Linking branches and pull requests to the tasks that name them.
+  schedules: SCHEDULES,
+  fields: FIELDS,
+  parts: PARTS,
+  actions: ACTIONS,
+  help: HELP,
 
   // The four dashboard tiles. Each module runs in Initiative's sandbox with
   // one data source, the endpoint its tile is bound to, and returns a scene.
@@ -439,6 +471,8 @@ export default definePlugin({
       "An admin connects the organization once, on GitHub's own install page, and picks the repositories the plug-in may see. Dashboards then show open issues, pull requests waiting on review, Dependabot alerts and a fortnight of throughput for everyone, with nobody pasting a token.",
       "",
       "Members who connect their own GitHub account get their own review queue, and automations can open, comment on, close, label and move issues as them.",
+      "",
+      "Tasks link to the branches and pull requests that name them, such as acme-42, and show whether each is open, reviewed and passing its checks. A task can start its own branch in GitHub.",
     ].join("\n"),
     avatar: "assets/avatar.png",
     version: "6.0.0",

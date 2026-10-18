@@ -4,8 +4,10 @@ import {
   ACCOUNT,
   ASSIGNEES_OUT,
   AUTHOR_OUT,
+  CHECKS_LABEL,
   CLOSED_OUT,
   COMMENTS_OUT,
+  COUNT_OUT,
   CREATED_OUT,
   DIRECTION_IN,
   ISSUE_IDENTITY,
@@ -13,6 +15,7 @@ import {
   LABELS_OUT,
   LIMIT_IN,
   LINK_OUT,
+  many,
   MILESTONE_OUT,
   NUMBER,
   NUMBER_OUT,
@@ -22,11 +25,15 @@ import {
   PEOPLE_OF,
   REPO,
   REPO_OUT,
+  REVIEW_LABEL,
   ROWS_OUT,
+  SINCE_IN,
   SORT_IN,
   STATE_OUT,
+  STATUS_LABEL,
   text,
   TITLE_OUT,
+  TOTAL_OUT,
   UNAVAILABLE,
   UPDATED_OUT,
   URL_OUT,
@@ -39,14 +46,17 @@ import {
   needs,
   NEEDS_NUMBER,
   NEEDS_REPO,
+  PAGE,
   PUBLIC_READ,
   PUBLIC_WRITE,
   REPO_NAME,
   REPO_PATH,
   REPO_VARIABLES,
   rest,
+  ROLLUP_REFUSED,
   ROW_FIELDS,
   rows,
+  STATUS,
   subject,
   SUBJECT_FIELDS,
 } from "./support.js";
@@ -106,6 +116,36 @@ const FOUND = `(
   ${rows("$search.nodes", "$search.issueCount")}
 )`;
 
+/** What a pull request's review and checks are asked for: GitHub's own combined answers. */
+const REVIEW_FIELDS = "reviewDecision statusCheckRollup { state }";
+
+/**
+ * `$review(decision)` and `$checks(rollup)`: a pull request's review and its
+ * checks in the words its links show, from GitHub's `reviewDecision` and
+ * `statusCheckRollup`. No decision is no review and no rollup no checks, but a
+ * rollup GitHub would not show is not known, and neither is a word GitHub has
+ * added since: both are "".
+ */
+const REVIEW_AND_CHECKS = `
+  $refused := ${ROLLUP_REFUSED};
+  $review := function($decision) {
+    $decision = null ? "unreviewed"
+    : $decision = "APPROVED" ? "approved"
+    : $decision = "CHANGES_REQUESTED" ? "changes_requested"
+    : $decision = "REVIEW_REQUIRED" ? "review_required"
+    : ""
+  };
+  $checks := function($rollup) {
+    $rollup = null ? ($refused ? "" : "none")
+    : $rollup.state = "SUCCESS" ? "passing"
+    : $rollup.state in ["FAILURE", "ERROR"] ? "failing"
+    : $rollup.state in ["PENDING", "EXPECTED"] ? "pending"
+    : ""
+  }`;
+
+/** A time as GitHub's search takes it. */
+const SEARCH_TIME = "[Y0001]-[M01]-[D01]T[H01]:[m01]:[s01]+00:00";
+
 export const findPullRequests = defineEndpoint({
   direction: "read",
   label: text("Find pull requests", "Pull Requests suchen", "Buscar pull requests", "Rechercher des pull requests"),
@@ -157,10 +197,10 @@ export const getPullRequest = defineEndpoint({
   direction: "read",
   label: text("Get a pull request", "Pull Request abrufen", "Obtener una pull request", "Récupérer une pull request"),
   description: text(
-    "One pull request by number: whether it is a draft, and whether it merged.",
-    "Ein Pull Request nach Nummer: ob er ein Entwurf ist und ob er gemergt wurde.",
-    "Una pull request por número: si es un borrador y si se fusionó.",
-    "Une pull request par numéro : si c'est un brouillon, et si elle a été fusionnée."
+    "One pull request by number: whether it is a draft, whether it merged, its review and its checks.",
+    "Ein Pull Request nach Nummer: ob er ein Entwurf ist, ob er gemergt wurde, seine Review und seine Checks.",
+    "Una pull request por número: si es un borrador, si se fusionó, su revisión y sus comprobaciones.",
+    "Une pull request par numéro : brouillon ou non, fusionnée ou non, sa revue et ses vérifications."
   ),
   group: "reviews",
   ...PUBLIC_READ,
@@ -188,6 +228,10 @@ export const getPullRequest = defineEndpoint({
     ...UPDATED_OUT,
     ...CLOSED_OUT,
     merged_at: out("string"),
+    // In the words of the review and the checks a linked pull request shows;
+    // null when GitHub would not say.
+    review: out("string", { label: REVIEW_LABEL }),
+    checks: out("string", { label: CHECKS_LABEL }),
     ...UNAVAILABLE,
   },
   request: graphql(
@@ -199,6 +243,7 @@ export const getPullRequest = defineEndpoint({
            ${SUBJECT_FIELDS}
            isDraft merged mergedAt headRefName baseRefName changedFiles
            commits { totalCount }
+           ${REVIEW_FIELDS}
          }
        }
      }`,
@@ -207,16 +252,98 @@ export const getPullRequest = defineEndpoint({
   ...needs(NEEDS_REPO, NEEDS_NUMBER),
   map: subject(
     "pullRequest",
+    `(
+      ${REVIEW_AND_CHECKS};
+      $known := function($word) { $word ? $word : null };
+      {
+        "merged": $node.merged = true,
+        "draft": $node.isDraft = true,
+        "head_ref": $text($node.headRefName),
+        "base_ref": $text($node.baseRefName),
+        "commits": $node.commits.totalCount ? $node.commits.totalCount : 0,
+        "changed_files": $node.changedFiles ? $node.changedFiles : 0,
+        "merged_at": $text($node.mergedAt),
+        "review": $known($review($node.reviewDecision)),
+        "checks": $known($checks($node.statusCheckRollup))
+      }
+    )`
+  ),
+});
+
+/**
+ * The organization's pull requests that changed since a time, newest first and
+ * at most a hundred, with where each stands: what the schedule reads to keep
+ * every task's links current when a delivery went astray. One search names
+ * the installation's account from its connection, as GitHub searches an
+ * organization's or a user's, and the time, and nothing else.
+ */
+export const recentlyUpdated = defineEndpoint({
+  direction: "read",
+  label: text(
+    "Recently updated pull requests",
+    "Kürzlich geänderte Pull Requests",
+    "Pull requests actualizadas hace poco",
+    "Pull requests mises à jour récemment"
+  ),
+  description: text(
+    "The organization's pull requests changed since a time, with their status, review and checks.",
+    "Die Pull Requests der Organisation, die sich seit einem Zeitpunkt geändert haben, mit Status, Review und Checks.",
+    "Las pull requests de la organización que cambiaron desde un momento, con su estado, revisión y comprobaciones.",
+    "Les pull requests de l'organisation modifiées depuis un moment, avec leur état, leur revue et leurs vérifications."
+  ),
+  group: "reviews",
+  ...PUBLIC_READ,
+  cache_ttl_seconds: 0,
+  params: { ...SINCE_IN },
+  returns: {
+    // Each pull request's repository, as `owner/name`, beside its other columns.
+    repositories: many(out("string")),
+    numbers: many(out("int")),
+    titles: many(out("string")),
+    urls: many(out("url")),
+    // In the words a linked pull request shows; "" where GitHub would not say.
+    statuses: many(out("string", { label: STATUS_LABEL })),
+    reviews: many(out("string", { label: REVIEW_LABEL })),
+    checks: many(out("string", { label: CHECKS_LABEL })),
+    ...COUNT_OUT,
+    ...TOTAL_OUT,
+    ...UNAVAILABLE,
+  },
+  request: graphql(
+    `query Updated($query: String!, $first: Int!) {
+       search(query: $query, type: ISSUE, first: $first) {
+         issueCount
+         nodes { ... on PullRequest { number title url state isDraft merged repository { nameWithOwner } ${REVIEW_FIELDS} } }
+       }
+     }`,
     `{
-      "merged": $node.merged = true,
-      "draft": $node.isDraft = true,
-      "head_ref": $text($node.headRefName),
-      "base_ref": $text($node.baseRefName),
-      "commits": $node.commits.totalCount ? $node.commits.totalCount : 0,
-      "changed_files": $node.changedFiles ? $node.changedFiles : 0,
-      "merged_at": $text($node.mergedAt)
+      "query": $join([
+        "type:pr",
+        (connections.workspace.owner_type = "User" ? "user:" : "org:") & connections.workspace.owner,
+        "updated:>=" & $fromMillis(params.since ? $toMillis(params.since) : $millis() - 86400000, "${SEARCH_TIME}"),
+        "sort:updated-desc"
+      ], " "),
+      "first": ${PAGE}
     }`
   ),
+  errors: GITHUB_ERRORS,
+  map: `(
+    ${STATUS};
+    ${REVIEW_AND_CHECKS};
+    $search := response.body.data.search;
+    $pulls := $search.nodes[$type(number) = "number" and $type(repository.nameWithOwner) = "string"];
+    {
+      "repositories": [$pulls.repository.nameWithOwner],
+      "numbers": [$pulls.number],
+      "titles": [$pulls.(title ? title : "")],
+      "urls": [$pulls.(url ? url : "")],
+      "statuses": [$pulls.$status(merged, state, isDraft)],
+      "reviews": [$pulls.$review(reviewDecision)],
+      "checks": [$pulls.$checks(statusCheckRollup)],
+      "count": $count($pulls),
+      "total": $search.issueCount
+    }
+  )`,
 });
 
 export const requestReview = defineEndpoint({

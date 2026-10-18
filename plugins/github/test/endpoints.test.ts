@@ -1,14 +1,14 @@
 /**
  * Every endpoint, as Initiative runs it: the requests it makes to GitHub, on
  * which connection, and what it makes of GitHub's recorded answers, refusals
- * included.
+ * included; and the actions and the schedule that keep a task's links.
  */
 
-import { runEndpoint, type RecordedResponse } from "initiative-plugin-sdk/testing";
+import { runAction, runEndpoint, runSchedule, type RecordedResponse } from "initiative-plugin-sdk/testing";
 import { describe, expect, it } from "vitest";
 
 import plugin from "../src/plugin.js";
-import { READ, WRITE } from "../src/vocabulary.js";
+import { ACTION, FIELD, READ, WRITE } from "../src/vocabulary.js";
 import { recorded } from "./fixtures.js";
 
 const NOW = "2026-10-01T12:00:00Z";
@@ -30,7 +30,7 @@ function call(name: string, params: Record<string, unknown>, ...answers: Array<s
   });
 }
 
-const variables = (run: Awaited<ReturnType<typeof call>>) =>
+const variables = (run: { requests: Array<{ body?: unknown }> }) =>
   (run.requests[0].body as { variables: Record<string, unknown> }).variables;
 
 interface ReadCase {
@@ -144,6 +144,8 @@ const READS: ReadCase[] = [
       updated_at: "2026-09-02T00:00:00Z",
       closed_at: "2026-09-03T00:00:00Z",
       merged_at: "2026-09-03T00:00:00Z",
+      review: "approved",
+      checks: "passing",
     },
   },
   {
@@ -206,10 +208,44 @@ const READS: ReadCase[] = [
     answers: ["graphql/card"],
     result: { item_id: "PVTI_7", repository: "widgets", owner: "acme", number: 7 },
   },
+  {
+    name: READ.recentlyUpdated,
+    params: { since: "2026-10-01T11:00:00Z" },
+    answers: ["graphql/recently-updated"],
+    result: {
+      repositories: ["acme/widgets", "acme/Gadgets", "acme/widgets", "acme/widgets"],
+      numbers: [9, 12, 13, 14],
+      titles: ["Fix the build", "Try the cache", "Drop the unused index", "Bump the parser"],
+      urls: [
+        "https://github.com/acme/widgets/pull/9",
+        "https://github.com/acme/Gadgets/pull/12",
+        "https://github.com/acme/widgets/pull/13",
+        "https://github.com/acme/widgets/pull/14",
+      ],
+      statuses: ["merged", "draft", "open", "closed"],
+      reviews: ["approved", "unreviewed", "changes_requested", "review_required"],
+      checks: ["passing", "none", "failing", "pending"],
+      count: 4,
+      total: 4,
+    },
+  },
 ];
 
+/** GitHub's answer with a pull request's checks withheld: the field refused, the rest answered. */
+function unchecked(name: string, nodes: (data: any) => any[]): any {
+  const answer = recorded(name);
+  const pulls = nodes(answer.data);
+  for (const node of pulls) node.statusCheckRollup = null;
+  answer.errors = pulls.map((_, index) => ({
+    type: "FORBIDDEN",
+    path: [...(pulls.length > 1 ? ["search", "nodes", index] : ["repository", "pullRequest"]), "statusCheckRollup"],
+    message: "Resource not accessible by integration",
+  }));
+  return answer;
+}
+
 describe("reads", () => {
-  it("covers all fifteen", () => {
+  it("covers all sixteen", () => {
     expect(READS.map((one) => one.name).sort()).toEqual(Object.values(READ).sort());
   });
 
@@ -330,6 +366,23 @@ describe("reads", () => {
     });
   });
 
+  it("asks for the organization's pull requests changed since a time, a day back unless it says", async () => {
+    const since = await call(READ.recentlyUpdated, { since: "2026-10-01T11:00:00Z" }, "graphql/recently-updated");
+    expect(since.requests[0].connection).toBe("workspace");
+    expect(variables(since)).toEqual({ query: "type:pr org:acme updated:>=2026-10-01T11:00:00+00:00 sort:updated-desc", first: 100 });
+    const unsaid = await call(READ.recentlyUpdated, {}, "graphql/recently-updated");
+    expect(variables(unsaid).query).toBe("type:pr org:acme updated:>=2026-09-30T12:00:00+00:00 sort:updated-desc");
+  });
+
+  it("answers what it can of a pull request whose checks GitHub withholds", async () => {
+    const one = await call(READ.getPullRequest, { repo: "widgets", number: 9 }, { body: unchecked("graphql/pull", (data) => [data.repository.pullRequest]) });
+    expect(one).toMatchObject({ result: { number: 9, state: "merged", review: "approved", checks: null } });
+    const many = await call(READ.recentlyUpdated, {}, { body: unchecked("graphql/recently-updated", (data) => data.search.nodes) });
+    expect(many).toMatchObject({ result: { numbers: [9, 12, 13, 14], checks: ["", "", "", ""] } });
+    // A refusal of the question itself is still one.
+    expect(await call(READ.getPullRequest, { repo: "widgets", number: 9 }, "graphql/forbidden")).toMatchObject({ unavailable: "not-authorized" });
+  });
+
   it("names a missing repository, number, board or field rather than guessing one", async () => {
     const refused = { body: recorded("graphql/invalid-variables") };
     expect(await call(READ.findIssues, {}, refused)).toMatchObject({ unavailable: "repository-required" });
@@ -431,8 +484,10 @@ const WRITES: WriteCase[] = [
 ];
 
 describe("writes", () => {
-  it("covers all seven", () => {
-    expect([...WRITES.map((one) => one.name), WRITE.label, WRITE.moveProjectItem].sort()).toEqual(Object.values(WRITE).sort());
+  it("covers all eight", () => {
+    expect([...WRITES.map((one) => one.name), WRITE.label, WRITE.moveProjectItem, WRITE.startBranch].sort()).toEqual(
+      Object.values(WRITE).sort()
+    );
   });
 
   for (const one of WRITES) {
@@ -505,5 +560,154 @@ describe("writes", () => {
     expect(run.requests[0].connection).toBe("account");
     expect(variables(run)).toEqual({ project: "PVT_1", item: "PVTI_7", field: "F_1", option: "O_2" });
     expect(run).toMatchObject({ result: { item_id: "PVTI_7" } });
+  });
+});
+
+describe("a task's links", () => {
+  const TASK = { kind: "task" as const, id: 42, title: "Fix sign-in on the mobile app!" };
+  const PREFIX = { task_prefix: "acme" };
+  const SHA = "aa218f56b14c9653891f9e74264a383fa43fefbd";
+  const NEW_BRANCH = "acme-42-fix-sign-in-on-the-mobile-app";
+
+  /** The state each change gives a pull request's link. */
+  const states = (changes: Array<{ upsert?: Record<string, Array<{ state?: unknown }>> }>) =>
+    changes.map((change) => change.upsert![FIELD.pullRequests][0].state);
+
+  /** One of the task's actions, run with what the reader answered and GitHub's recorded answers. */
+  function act(name: string, call: { params?: Record<string, unknown>; element?: string; title?: string; settings?: Record<string, string> }, ...answers: Array<string | RecordedResponse>) {
+    const { title = TASK.title, settings = PREFIX, ...rest } = call;
+    return runAction(plugin, name, {
+      item: { ...TASK, title },
+      settings,
+      connections: CONNECTIONS,
+      now: NOW,
+      responses: answers.map((answer) => (typeof answer === "string" ? { body: recorded(answer) } : answer)),
+      ...rest,
+    });
+  }
+
+  /** Start a branch from `base`, GitHub finding it and making the new one. */
+  const start = (base: string, title?: string) =>
+    act(ACTION.startBranch, { params: { repo: "widgets", base }, title }, "rest/git-ref", { status: 201, body: recorded("rest/git-ref-created") });
+
+  it("Start a branch makes the task's branch from the base as the member, and links it", async () => {
+    const run = await start("release/1.0");
+    expect(run.requests).toEqual([
+      { method: "GET", url: `${API}/repos/acme/widgets/git/ref/heads/release/1.0`, headers: HEADERS, connection: "account" },
+      {
+        method: "POST",
+        url: `${API}/repos/acme/widgets/git/refs`,
+        headers: HEADERS,
+        body: { ref: `refs/heads/${NEW_BRANCH}`, sha: SHA },
+        connection: "account",
+      },
+    ]);
+    const url = `https://github.com/acme/widgets/tree/${NEW_BRANCH}`;
+    expect(run).toEqual({
+      requests: expect.any(Array),
+      result: { repository: "widgets", owner: "acme", name: NEW_BRANCH, url },
+      change: { upsert: { [FIELD.branches]: [{ ref: `branch:acme/widgets:${NEW_BRANCH}`, url, text: NEW_BRANCH, state: { status: "present" } }] } },
+    });
+  });
+
+  it("names the branch after the task's reference and the first fifty characters of its title", async () => {
+    const names = {
+      "  A very long title that goes well past the fifty character cut-off point ": "acme-42-a-very-long-title-that-goes-well-past-the-fifty-ch",
+      [`${"x".repeat(49)} y`]: `acme-42-${"x".repeat(49)}`,
+      "Straße für Ärzte": "acme-42-stra-e-f-r-rzte",
+      "!!!": "acme-42",
+    };
+    for (const [title, name] of Object.entries(names)) {
+      expect((await start("main", title)).requests[1].body, title).toEqual({ ref: `refs/heads/${name}`, sha: SHA });
+    }
+  });
+
+  it("Start a branch starts from a branch of the repository or from none, and says what stopped it", async () => {
+    for (const base of ["../../../user", "main/../../x", "a//b", ".hidden", "main.lock", "main?x=1", "%2e%2e"]) {
+      const run = await act(ACTION.startBranch, { params: { repo: "widgets", base } }, { status: 404, body: { message: "Not Found" } });
+      expect(run.requests.map((request) => request.url), base).toEqual([`${API}/repos/acme/widgets/git/ref/heads/`]);
+      expect(run).toMatchObject({ unavailable: "branch-required" });
+    }
+    const taken = await act(ACTION.startBranch, { params: { repo: "widgets", base: "main" } }, "rest/git-ref", {
+      status: 422,
+      body: { message: "Reference already exists" },
+    });
+    expect(taken).toMatchObject({ unavailable: "branch-exists" });
+    const refused = await act(ACTION.startBranch, { params: { repo: "widgets", base: "main" } }, "rest/git-ref", { status: 403, body: recorded("rest/forbidden") });
+    expect(refused).toMatchObject({ unavailable: "not-authorized" });
+    // A task's reference needs the install's prefix: no branch is made without one.
+    const unnamed = await act(ACTION.startBranch, { params: { repo: "widgets", base: "main" }, settings: {} }, "rest/git-ref");
+    expect(unnamed).toMatchObject({ requests: [{ method: "GET" }], unavailable: "reference-required" });
+  });
+
+  it("Link a pull request keeps the pull request it reads, with its review and checks", async () => {
+    const run = await act(ACTION.linkPullRequest, { params: { repo: "widgets", number: 9 } }, "graphql/pull");
+    expect(run.requests).toHaveLength(1);
+    expect(run).toMatchObject({
+      change: {
+        upsert: {
+          [FIELD.pullRequests]: [
+            {
+              ref: "pr:acme/widgets#9",
+              url: "https://github.com/acme/widgets/pull/9",
+              text: "#9 Fix the build",
+              state: { status: "merged", review: "approved", checks: "passing" },
+            },
+          ],
+        },
+      },
+    });
+    // What GitHub withholds stays as the link had it.
+    const withheld = await act(ACTION.linkPullRequest, { params: { repo: "widgets", number: 9 } }, {
+      body: unchecked("graphql/pull", (data) => [data.repository.pullRequest]),
+    });
+    expect(states("change" in withheld ? [withheld.change!] : [])).toEqual([{ status: "merged", review: "approved" }]);
+  });
+
+  it("Unlink takes a link off the list it is in", async () => {
+    const unlink = (element: string) => runAction(plugin, ACTION.unlink, { item: TASK, element });
+    expect(await unlink("pr:acme/widgets#9")).toEqual({
+      requests: [],
+      change: { remove: { [FIELD.pullRequests]: ["pr:acme/widgets#9"] } },
+    });
+    expect(await unlink(`branch:acme/widgets:${NEW_BRANCH}`)).toEqual({
+      requests: [],
+      change: { remove: { [FIELD.branches]: [`branch:acme/widgets:${NEW_BRANCH}`] } },
+    });
+  });
+
+  it("the refresh re-reads what changed since a quarter of an hour before its last run, for every task holding it", async () => {
+    const refresh = (since: string | null, answer = recorded("graphql/recently-updated"), connections: typeof CONNECTIONS = CONNECTIONS) =>
+      runSchedule(plugin, "refresh", { since, connections, now: NOW, settings: PREFIX, responses: [{ body: answer }] });
+    const run = await refresh("2026-10-01T11:00:00Z");
+    expect(variables(run).query).toBe("type:pr org:acme updated:>=2026-10-01T10:45:00+00:00 sort:updated-desc");
+    const held = (repository: string, number: number, title: string, state: Record<string, string>) => {
+      const ref = `pr:${repository.toLowerCase()}#${number}`;
+      return {
+        target: { holding: { key: FIELD.pullRequests, value: ref } },
+        upsert: { [FIELD.pullRequests]: [{ ref, url: `https://github.com/${repository}/pull/${number}`, text: `#${number} ${title}`, state }] },
+      };
+    };
+    expect(run).toMatchObject({
+      writes: [
+        held("acme/widgets", 9, "Fix the build", { status: "merged", review: "approved", checks: "passing" }),
+        held("acme/Gadgets", 12, "Try the cache", { status: "draft", review: "unreviewed", checks: "none" }),
+        held("acme/widgets", 13, "Drop the unused index", { status: "open", review: "changes_requested", checks: "failing" }),
+        held("acme/widgets", 14, "Bump the parser", { status: "closed", review: "review_required", checks: "pending" }),
+      ],
+    });
+    // The first run reads a day back; checks GitHub withholds stay as each link had them.
+    const first = await refresh(null, unchecked("graphql/recently-updated", (data) => data.search.nodes));
+    expect(variables(first).query).toBe("type:pr org:acme updated:>=2026-09-30T12:00:00+00:00 sort:updated-desc");
+    expect(states("writes" in first ? first.writes : [])).toEqual([
+      { status: "merged", review: "approved" },
+      { status: "draft", review: "unreviewed" },
+      { status: "open", review: "changes_requested" },
+      { status: "closed", review: "review_required" },
+    ]);
+    // An installation on a personal account is searched as a user's.
+    const personal = { ...CONNECTIONS, workspace: { owner: "alice", installation_id: 43, owner_type: "User" } };
+    const theirs = await refresh(null, recorded("graphql/recently-updated"), personal);
+    expect(variables(theirs).query).toBe("type:pr user:alice updated:>=2026-09-30T12:00:00+00:00 sort:updated-desc");
   });
 });

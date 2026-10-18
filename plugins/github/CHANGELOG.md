@@ -1,5 +1,52 @@
 # Changelog
 
+## [Unreleased]
+
+Tasks link to the GitHub branches and pull requests that name them.
+
+### Added
+
+- A task reference prefix on each install, made from the community's name and
+  held by no other community on the server, which an admin may rename. A branch
+  whose name holds a task's reference, such as `acme-42`, or a pull request
+  whose branch, title or description holds it, links to that task; references
+  made with an earlier prefix keep linking.
+- *Pull requests* and *Branches* on tasks: each linked pull request with its
+  status, review and checks, and each branch, shown as deleted once it is gone
+  from GitHub. GitHub's deliveries move them at once, and a re-read every 15
+  minutes settles checks and makes good a delivery lost on the way.
+- A *GitHub* section for tasks: the task's reference, its links, **Start a
+  branch** (creates the task's branch in GitHub as you) and **Link a pull
+  request**, with **Unlink** on each link, and help behind its "?".
+- `recently-updated`: the organization's pull requests changed since a time,
+  with their status, review and checks. `get-pull-request` also answers a pull
+  request's `review` and `checks`.
+
+### Changed
+
+- The GitHub App asks for Contents read and write, where it read, and for
+  Checks and Commit statuses read, and subscribes to the Delete, Pull request
+  review and Check suite events.
+- The plug-in asks a community to let it read projects (`projects:read`): it
+  keeps its links on tasks.
+
+### Upgrading
+
+- In the GitHub App's settings, give it Contents: *Read and write*, Checks:
+  *Read-only* and Commit statuses: *Read-only*, and subscribe it to the
+  Delete, Pull request review and Check suite events. Each organization owner
+  then accepts the new permissions in GitHub, Contents write, Checks read and
+  Commit statuses read; until they do, Start a branch is refused and linked
+  pull requests show no checks.
+- A GitHub installation on a personal account is connected once more, with
+  **Connect** on *GitHub organization*, so the plug-in searches its pull
+  requests as a user's. An organization's carries on as it is.
+- In each community, a superadmin accepts this version from the plug-in's
+  **Update** button, letting it read projects.
+- Needs an Initiative serving the plug-in API that keeps a declarative
+  plug-in's lists, settings, actions and schedules; the manifest's
+  `min_plugin_api` names it, and an older Initiative refuses to install it.
+
 ## [6.0.0]
 
 ### Changed
