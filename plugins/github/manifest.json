@@ -1,14 +1,20 @@
 {
   "plugin_kind": "service",
   "features": [
+    "actions",
     "dashboards",
     "endpoints",
+    "fields",
+    "parts",
     "widgets"
   ],
   "default_name": "GitHub",
   "min_plugin_api": "6.0",
   "hosts": [
     "api.github.com"
+  ],
+  "scopes": [
+    "projects:read"
   ],
   "vendor": {
     "label": {
@@ -94,7 +100,9 @@
         "default_permissions": {
           "issues": "write",
           "pull_requests": "write",
-          "contents": "read",
+          "contents": "write",
+          "checks": "read",
+          "statuses": "read",
           "vulnerability_alerts": "read",
           "organization_projects": "write",
           "metadata": "read"
@@ -103,7 +111,10 @@
           "issues",
           "pull_request",
           "release",
-          "create"
+          "create",
+          "delete",
+          "pull_request_review",
+          "check_suite"
         ]
       },
       "values": {
@@ -149,6 +160,17 @@
             "de": "Installation",
             "es": "Instalación",
             "fr": "Installation"
+          }
+        },
+        {
+          "key": "owner_type",
+          "type": "string",
+          "managed": true,
+          "label": {
+            "en": "Account type",
+            "de": "Kontotyp",
+            "es": "Tipo de cuenta",
+            "fr": "Type de compte"
           }
         }
       ],
@@ -220,7 +242,7 @@
               }
             }
           ],
-          "map": "(\n            $claimed := params.installation_id;\n            $held := steps.installations.body[$string(id) = $claimed][0];\n            $account := $held.account;\n            $controls := $account.type = \"Organization\"\n              ? $exists(steps.memberships.body[organization.id = $account.id and state = \"active\" and role = \"admin\"])\n              : $account.type = \"User\" and $account.id = steps.user.body.id;\n            $controls ? {\"values\": {\"owner\": $account.login, \"installation_id\": $held.id}, \"account_label\": $account.login} : {}\n          )",
+          "map": "(\n            $claimed := params.installation_id;\n            $held := steps.installations.body[$string(id) = $claimed][0];\n            $account := $held.account;\n            $controls := $account.type = \"Organization\"\n              ? $exists(steps.memberships.body[organization.id = $account.id and state = \"active\" and role = \"admin\"])\n              : $account.type = \"User\" and $account.id = steps.user.body.id;\n            $controls\n              ? {\"values\": {\"owner\": $account.login, \"installation_id\": $held.id, \"owner_type\": $account.type}, \"account_label\": $account.login}\n              : {}\n          )",
           "refuse_when": "$not($exists(result.values.owner) and $exists(result.values.installation_id))",
           "code": "installation-not-held"
         }
@@ -297,7 +319,9 @@
         "scopes": [
           "issues:write",
           "pull_requests:write",
-          "contents:read",
+          "contents:write",
+          "checks:read",
+          "statuses:read",
           "vulnerability_alerts:read",
           "organization_projects:write",
           "metadata:read"
@@ -333,7 +357,8 @@
       {
         "when": "headers.\"x-github-event\" = \"pull_request\" and payload.action = \"review_requested\" and $type(payload.pull_request.number) = \"number\" and ($type(payload.repository.name) = \"string\" and payload.repository.name != \"\")",
         "emit": "plugin.beyonders-studio.github.review-requested",
-        "map": "(\n    $text := function($value) { $type($value) = \"string\" ? $value : null };\n    {\n      \"repository\": payload.repository.name, \"owner\": $text(payload.repository.owner.login),\n      \"number\": payload.pull_request.number,\n      \"title\": $text(payload.pull_request.title),\n      \"url\": $text(payload.pull_request.html_url),\n      \"author\": $text(payload.pull_request.user.login),\n      \"reviewer\": $type(payload.requested_reviewer.login) = \"string\"\n        ? payload.requested_reviewer.login\n        : $text(payload.requested_team.slug)\n    }\n  )"
+        "map": "(\n    $text := function($value) { $type($value) = \"string\" ? $value : null };\n    {\n      \"repository\": payload.repository.name, \"owner\": $text(payload.repository.owner.login),\n      \"number\": payload.pull_request.number,\n      \"title\": $text(payload.pull_request.title),\n      \"url\": $text(payload.pull_request.html_url),\n      \"author\": $text(payload.pull_request.user.login),\n      \"reviewer\": $type(payload.requested_reviewer.login) = \"string\"\n        ? payload.requested_reviewer.login\n        : $text(payload.requested_team.slug)\n    }\n  )",
+        "write": "(\n    \n    $status := function($merged, $state, $draft) {\n  $merged = true ? \"merged\" : $lowercase($string($state)) = \"closed\" ? \"closed\" : $draft = true ? \"draft\" : \"open\"\n};\n    $pull := payload.pull_request;\n    $repository := payload.repository.full_name;\n    $type($pull.number) = \"number\" and $type($repository) = \"string\" ? (\n      $ref := \"pr:\" & $lowercase($repository) & \"#\" & $pull.number;\n      $change := {\"github.pull_requests\": [\n        {\"ref\": $ref, \"url\": $pull.html_url, \"text\": \"#\" & $pull.number & \" \" & $pull.title, \"state\": {\"status\": $status($pull.merged, $pull.state, $pull.draft)}}\n      ]};\n      [ {\"target\": {\"holding\": {\"key\": \"github.pull_requests\", \"value\": $ref}}, \"upsert\": $change}]\n    )\n  )"
       },
       {
         "when": "headers.\"x-github-event\" = \"release\" and payload.action = \"released\" and ($type(payload.repository.name) = \"string\" and payload.repository.name != \"\") and ($type(payload.release.tag_name) = \"string\" and payload.release.tag_name != \"\")",
@@ -349,6 +374,34 @@
         "when": "headers.\"x-github-event\" = \"create\" and payload.ref_type = \"tag\" and ($type(payload.repository.name) = \"string\" and payload.repository.name != \"\") and ($type(payload.ref) = \"string\" and payload.ref != \"\")",
         "emit": "plugin.beyonders-studio.github.tag-created",
         "map": "(\n      $text := function($value) { $type($value) = \"string\" ? $value : null };\n      $home := payload.repository.html_url;\n      {\n        \"repository\": payload.repository.name, \"owner\": $text(payload.repository.owner.login),\n        \"tag\": payload.ref,\n        \"url\": ($type($home) = \"string\" and $home != \"\") ? $encodeUrl($home & \"/tree/\" & payload.ref) : null,\n        \"author\": $text(payload.sender.login)\n      }\n    )"
+      },
+      {
+        "when": "headers.\"x-github-event\" = \"create\" and payload.ref_type = \"branch\"",
+        "write": "(\n    $name := payload.ref;\n    $repository := payload.repository.full_name;\n    $type($name) = \"string\" and $name != \"\" and $type($repository) = \"string\" ? (\n      $ref := \"branch:\" & $lowercase($repository) & \":\" & $name;\n      $length($ref) <= 255 ? (\n      $tasks := function($texts) {(\n  $prefixes := [settings.task_prefix, aliases.task_prefix];\n  $distinct($match(\n    $join($filter([$texts], function($text) { $type($text) = \"string\" }), \" \"),\n    /[A-Za-z0-9]+-[0-9]+[A-Za-z0-9]*/,\n    1000\n  ).(\n    $reference := $split($lowercase(match), \"-\");\n    $reference[0] in $prefixes and $contains($reference[1], /^[1-9][0-9]{0,8}$/) ? $number($reference[1])\n  ))\n)};\n      $change := {\"github.branches\": [{\n        \"ref\": $ref, \"url\": $encodeUrl(\"https://github.com/\" & $repository & \"/tree/\" & $name), \"text\": $name, \"state\": {\"status\": \"present\"}\n      }]};\n      [$filter($tasks($name), function($id, $i) { $i < 100 }).{\"target\": {\"kind\": \"task\", \"id\": $}, \"upsert\": $change}]\n    )\n    )\n  )"
+      },
+      {
+        "when": "headers.\"x-github-event\" = \"delete\" and payload.ref_type = \"branch\"",
+        "write": "(\n    $name := payload.ref;\n    $repository := payload.repository.full_name;\n    $type($name) = \"string\" and $name != \"\" and $type($repository) = \"string\" ? (\n      $ref := \"branch:\" & $lowercase($repository) & \":\" & $name;\n      $length($ref) <= 255 ? [{\"target\": {\"holding\": {\"key\": \"github.branches\", \"value\": $ref}}, \"upsert\": {\"github.branches\": [{\"ref\": $ref, \"state\": {\"status\": \"deleted\"}}]}}]\n    )\n  )"
+      },
+      {
+        "when": "headers.\"x-github-event\" = \"pull_request\" and payload.action in [\"opened\",\"reopened\",\"ready_for_review\",\"synchronize\",\"closed\"]",
+        "write": "(\n    $tasks := function($texts) {(\n  $prefixes := [settings.task_prefix, aliases.task_prefix];\n  $distinct($match(\n    $join($filter([$texts], function($text) { $type($text) = \"string\" }), \" \"),\n    /[A-Za-z0-9]+-[0-9]+[A-Za-z0-9]*/,\n    1000\n  ).(\n    $reference := $split($lowercase(match), \"-\");\n    $reference[0] in $prefixes and $contains($reference[1], /^[1-9][0-9]{0,8}$/) ? $number($reference[1])\n  ))\n)};\n    $status := function($merged, $state, $draft) {\n  $merged = true ? \"merged\" : $lowercase($string($state)) = \"closed\" ? \"closed\" : $draft = true ? \"draft\" : \"open\"\n};\n    $pull := payload.pull_request;\n    $repository := payload.repository.full_name;\n    $type($pull.number) = \"number\" and $type($repository) = \"string\" ? (\n      $ref := \"pr:\" & $lowercase($repository) & \"#\" & $pull.number;\n      $change := {\"github.pull_requests\": [\n        {\"ref\": $ref, \"url\": $pull.html_url, \"text\": \"#\" & $pull.number & \" \" & $pull.title, \"state\": {\"status\": $status($pull.merged, $pull.state, $pull.draft)}}\n      ]};\n      [$filter($tasks([$pull.head.ref, $pull.title, $pull.body]), function($id, $i) { $i < 99 }).{\"target\": {\"kind\": \"task\", \"id\": $}, \"upsert\": $change}, {\"target\": {\"holding\": {\"key\": \"github.pull_requests\", \"value\": $ref}}, \"upsert\": $change}]\n    )\n  )"
+      },
+      {
+        "when": "headers.\"x-github-event\" = \"pull_request\" and payload.action = \"edited\"",
+        "write": "(\n    $tasks := function($texts) {(\n  $prefixes := [settings.task_prefix, aliases.task_prefix];\n  $distinct($match(\n    $join($filter([$texts], function($text) { $type($text) = \"string\" }), \" \"),\n    /[A-Za-z0-9]+-[0-9]+[A-Za-z0-9]*/,\n    1000\n  ).(\n    $reference := $split($lowercase(match), \"-\");\n    $reference[0] in $prefixes and $contains($reference[1], /^[1-9][0-9]{0,8}$/) ? $number($reference[1])\n  ))\n)};\n    $status := function($merged, $state, $draft) {\n  $merged = true ? \"merged\" : $lowercase($string($state)) = \"closed\" ? \"closed\" : $draft = true ? \"draft\" : \"open\"\n};\n    $pull := payload.pull_request;\n    $repository := payload.repository.full_name;\n    $type($pull.number) = \"number\" and $type($repository) = \"string\" ? (\n      $ref := \"pr:\" & $lowercase($repository) & \"#\" & $pull.number;\n      $change := {\"github.pull_requests\": [\n        {\"ref\": $ref, \"url\": $pull.html_url, \"text\": \"#\" & $pull.number & \" \" & $pull.title, \"state\": {\"status\": $status($pull.merged, $pull.state, $pull.draft)}}\n      ]};\n      [$filter((\n      $before := $tasks([\n        $exists(payload.changes.title.from) ? payload.changes.title.from : $pull.title,\n        $exists(payload.changes.body.from) ? payload.changes.body.from : $pull.body\n      ]);\n      $tasks([$pull.title, $pull.body])[$not($ in $before)]\n    ), function($id, $i) { $i < 99 }).{\"target\": {\"kind\": \"task\", \"id\": $}, \"upsert\": $change}, {\"target\": {\"holding\": {\"key\": \"github.pull_requests\", \"value\": $ref}}, \"upsert\": $change}]\n    )\n  )"
+      },
+      {
+        "when": "headers.\"x-github-event\" = \"pull_request\"",
+        "write": "(\n    \n    $status := function($merged, $state, $draft) {\n  $merged = true ? \"merged\" : $lowercase($string($state)) = \"closed\" ? \"closed\" : $draft = true ? \"draft\" : \"open\"\n};\n    $pull := payload.pull_request;\n    $repository := payload.repository.full_name;\n    $type($pull.number) = \"number\" and $type($repository) = \"string\" ? (\n      $ref := \"pr:\" & $lowercase($repository) & \"#\" & $pull.number;\n      $change := {\"github.pull_requests\": [\n        {\"ref\": $ref, \"url\": $pull.html_url, \"text\": \"#\" & $pull.number & \" \" & $pull.title, \"state\": {\"status\": $status($pull.merged, $pull.state, $pull.draft)}}\n      ]};\n      [ {\"target\": {\"holding\": {\"key\": \"github.pull_requests\", \"value\": $ref}}, \"upsert\": $change}]\n    )\n  )"
+      },
+      {
+        "when": "headers.\"x-github-event\" = \"pull_request_review\" and payload.action in [\"submitted\",\"dismissed\"]",
+        "write": "(\n    $value := (\n        $state := $lowercase($string(payload.review.state));\n        payload.action = \"dismissed\" ? \"review_required\" : $state in [\"approved\", \"changes_requested\"] ? $state\n      );\n    $repository := payload.repository.full_name;\n    $value and $type($repository) = \"string\" ? [\n      $filter([payload.pull_request.number][$type($) = \"number\"], function($number, $i) { $i < 100 }).(\n        $ref := \"pr:\" & $lowercase($repository) & \"#\" & $;\n        {\"target\": {\"holding\": {\"key\": \"github.pull_requests\", \"value\": $ref}}, \"upsert\": {\"github.pull_requests\": [{\"ref\": $ref, \"state\": {\"review\": $value}}]}}\n      )\n    ]\n  )"
+      },
+      {
+        "when": "headers.\"x-github-event\" = \"check_suite\" and payload.action = \"completed\"",
+        "write": "(\n    $value := payload.check_suite.conclusion in [\"failure\", \"timed_out\", \"startup_failure\", \"action_required\", \"cancelled\"] ? \"failing\";\n    $repository := payload.repository.full_name;\n    $value and $type($repository) = \"string\" ? [\n      $filter(payload.check_suite.pull_requests.number[$type($) = \"number\"], function($number, $i) { $i < 100 }).(\n        $ref := \"pr:\" & $lowercase($repository) & \"#\" & $;\n        {\"target\": {\"holding\": {\"key\": \"github.pull_requests\", \"value\": $ref}}, \"upsert\": {\"github.pull_requests\": [{\"ref\": $ref, \"state\": {\"checks\": $value}}]}}\n      )\n    ]\n  )"
       }
     ],
     "status": [
@@ -369,6 +422,15 @@
       }
     ]
   },
+  "schedules": [
+    {
+      "id": "refresh",
+      "every": "15m",
+      "endpoint": "plugin.beyonders-studio.github.recently-updated",
+      "params": "since ? {\"since\": $fromMillis($toMillis(since) - 900000)} : {}",
+      "write": "[$map(result.numbers, function($number, $i) {(\n      $ref := \"pr:\" & $lowercase(result.repositories[$i]) & \"#\" & $number;\n      {\n        \"target\": {\"holding\": {\"key\": \"github.pull_requests\", \"value\": $ref}},\n        \"upsert\": {\"github.pull_requests\": [\n          {\"ref\": $ref, \"url\": result.urls[$i], \"text\": \"#\" & $number & \" \" & result.titles[$i], \"state\": $merge([{\"status\": result.statuses[$i]}, result.reviews[$i] ? {\"review\": result.reviews[$i]}, result.checks[$i] ? {\"checks\": result.checks[$i]}])}\n        ]}\n      }\n    )})]"
+    }
+  ],
   "endpoints": [
     {
       "id": "plugin.beyonders-studio.github.list-repositories",
@@ -466,7 +528,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -603,7 +665,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -740,7 +802,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -877,7 +939,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -1025,7 +1087,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -1236,7 +1298,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -1536,7 +1598,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -1557,10 +1619,10 @@
         "fr": "Récupérer une pull request"
       },
       "description": {
-        "en": "One pull request by number: whether it is a draft, and whether it merged.",
-        "de": "Ein Pull Request nach Nummer: ob er ein Entwurf ist und ob er gemergt wurde.",
-        "es": "Una pull request por número: si es un borrador y si se fusionó.",
-        "fr": "Une pull request par numéro : si c'est un brouillon, et si elle a été fusionnée."
+        "en": "One pull request by number: whether it is a draft, whether it merged, its review and its checks.",
+        "de": "Ein Pull Request nach Nummer: ob er ein Entwurf ist, ob er gemergt wurde, seine Review und seine Checks.",
+        "es": "Una pull request por número: si es un borrador, si se fusionó, su revisión y sus comprobaciones.",
+        "fr": "Une pull request par numéro : brouillon ou non, fusionnée ou non, sa revue et ses vérifications."
       },
       "group": "reviews",
       "public": true,
@@ -1712,6 +1774,26 @@
           "type": "string"
         },
         {
+          "key": "review",
+          "type": "string",
+          "label": {
+            "en": "Review",
+            "de": "Review",
+            "es": "Revisión",
+            "fr": "Revue"
+          }
+        },
+        {
+          "key": "checks",
+          "type": "string",
+          "label": {
+            "en": "Checks",
+            "de": "Checks",
+            "es": "Comprobaciones",
+            "fr": "Vérifications"
+          }
+        },
+        {
           "key": "unavailable",
           "type": "string",
           "label": {
@@ -1731,7 +1813,7 @@
           "User-Agent": "\"initiative-github\""
         },
         "graphql": {
-          "query": "query Pull($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { name owner { login } pullRequest(number: $number) { number title url state createdAt updatedAt closedAt author { login } milestone { title } comments { totalCount } labels(first: 50) { nodes { name } } assignees(first: 20) { nodes { login } } isDraft merged mergedAt headRefName baseRefName changedFiles commits { totalCount } } } }",
+          "query": "query Pull($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { name owner { login } pullRequest(number: $number) { number title url state createdAt updatedAt closedAt author { login } milestone { title } comments { totalCount } labels(first: 50) { nodes { name } } assignees(first: 20) { nodes { login } } isDraft merged mergedAt headRefName baseRefName changedFiles commits { totalCount } reviewDecision statusCheckRollup { state } } } }",
           "variables": "{\"owner\": connections.workspace.owner, \"repo\": (\n  $repo := params.repo;\n  $type($repo) = \"string\" and $length($repo) <= 100 and $contains($repo, /^[A-Za-z0-9._-]+$/) and $not($repo in [\".\", \"..\"])\n    ? $repo : \"\"\n), \"number\": params.number}"
         },
         "connection": "workspace"
@@ -1773,7 +1855,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -1782,7 +1864,7 @@
           "code": "invalid"
         }
       ],
-      "map": "(\n    $text := function($value) { $type($value) = \"string\" ? $value : null };\n    $repository := response.body.data.repository;\n    $node := $repository.pullRequest;\n    $node ? $merge([\n      {\n        \"repository\": $repository.name,\n        \"owner\": $repository.owner.login,\n        \"number\": $node.number,\n        \"title\": $text($node.title),\n        \"state\": $node.state ? $lowercase($node.state) : null,\n        \"url\": $text($node.url),\n        \"author\": $text($node.author.login),\n        \"labels\": [$node.labels.nodes.name],\n        \"assignees\": [$node.assignees.nodes.login],\n        \"milestone\": $text($node.milestone.title),\n        \"comments\": $node.comments.totalCount ? $node.comments.totalCount : 0,\n        \"created_at\": $text($node.createdAt),\n        \"updated_at\": $text($node.updatedAt),\n        \"closed_at\": $text($node.closedAt)\n      },\n      {\n      \"merged\": $node.merged = true,\n      \"draft\": $node.isDraft = true,\n      \"head_ref\": $text($node.headRefName),\n      \"base_ref\": $text($node.baseRefName),\n      \"commits\": $node.commits.totalCount ? $node.commits.totalCount : 0,\n      \"changed_files\": $node.changedFiles ? $node.changedFiles : 0,\n      \"merged_at\": $text($node.mergedAt)\n    }\n    ]) : {\"unavailable\": \"not-found\"}\n  )"
+      "map": "(\n    $text := function($value) { $type($value) = \"string\" ? $value : null };\n    $repository := response.body.data.repository;\n    $node := $repository.pullRequest;\n    $node ? $merge([\n      {\n        \"repository\": $repository.name,\n        \"owner\": $repository.owner.login,\n        \"number\": $node.number,\n        \"title\": $text($node.title),\n        \"state\": $node.state ? $lowercase($node.state) : null,\n        \"url\": $text($node.url),\n        \"author\": $text($node.author.login),\n        \"labels\": [$node.labels.nodes.name],\n        \"assignees\": [$node.assignees.nodes.login],\n        \"milestone\": $text($node.milestone.title),\n        \"comments\": $node.comments.totalCount ? $node.comments.totalCount : 0,\n        \"created_at\": $text($node.createdAt),\n        \"updated_at\": $text($node.updatedAt),\n        \"closed_at\": $text($node.closedAt)\n      },\n      (\n      \n  $refused := $exists(response.body.errors[\"statusCheckRollup\" in path]);\n  $review := function($decision) {\n    $decision = null ? \"unreviewed\"\n    : $decision = \"APPROVED\" ? \"approved\"\n    : $decision = \"CHANGES_REQUESTED\" ? \"changes_requested\"\n    : $decision = \"REVIEW_REQUIRED\" ? \"review_required\"\n    : \"\"\n  };\n  $checks := function($rollup) {\n    $rollup = null ? ($refused ? \"\" : \"none\")\n    : $rollup.state = \"SUCCESS\" ? \"passing\"\n    : $rollup.state in [\"FAILURE\", \"ERROR\"] ? \"failing\"\n    : $rollup.state in [\"PENDING\", \"EXPECTED\"] ? \"pending\"\n    : \"\"\n  };\n      $known := function($word) { $word ? $word : null };\n      {\n        \"merged\": $node.merged = true,\n        \"draft\": $node.isDraft = true,\n        \"head_ref\": $text($node.headRefName),\n        \"base_ref\": $text($node.baseRefName),\n        \"commits\": $node.commits.totalCount ? $node.commits.totalCount : 0,\n        \"changed_files\": $node.changedFiles ? $node.changedFiles : 0,\n        \"merged_at\": $text($node.mergedAt),\n        \"review\": $known($review($node.reviewDecision)),\n        \"checks\": $known($checks($node.statusCheckRollup))\n      }\n    )\n    ]) : {\"unavailable\": \"not-found\"}\n  )"
     },
     {
       "id": "plugin.beyonders-studio.github.find-pull-requests",
@@ -2067,7 +2149,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -2333,7 +2415,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -2489,7 +2571,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -2612,7 +2694,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -2753,7 +2835,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -2922,7 +3004,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -3098,7 +3180,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -3108,6 +3190,168 @@
         }
       ],
       "map": "(\n    $repository := response.body.data.repository;\n    $item := $repository.issueOrPullRequest;\n    $wanted := params.project_id;\n    $card := $item.projectItems.nodes[$type(id) = \"string\" and project.id = $wanted][0];\n    $item ? (\n      $card ? {\"item_id\": $card.id, \"repository\": $repository.name, \"owner\": $repository.owner.login, \"number\": params.number}\n      : {\"unavailable\": \"not-on-that-board\"}\n    ) : {\"unavailable\": \"not-found\"}\n  )"
+    },
+    {
+      "id": "plugin.beyonders-studio.github.recently-updated",
+      "direction": "read",
+      "label": {
+        "en": "Recently updated pull requests",
+        "de": "Kürzlich geänderte Pull Requests",
+        "es": "Pull requests actualizadas hace poco",
+        "fr": "Pull requests mises à jour récemment"
+      },
+      "description": {
+        "en": "The organization's pull requests changed since a time, with their status, review and checks.",
+        "de": "Die Pull Requests der Organisation, die sich seit einem Zeitpunkt geändert haben, mit Status, Review und Checks.",
+        "es": "Las pull requests de la organización que cambiaron desde un momento, con su estado, revisión y comprobaciones.",
+        "fr": "Les pull requests de l'organisation modifiées depuis un moment, avec leur état, leur revue et leurs vérifications."
+      },
+      "group": "reviews",
+      "public": true,
+      "actors": [
+        "installation",
+        "member"
+      ],
+      "requires": {
+        "all_of": [
+          "workspace"
+        ]
+      },
+      "cache_ttl_seconds": 0,
+      "params": [
+        {
+          "key": "since",
+          "type": "datetime",
+          "label": {
+            "en": "Since",
+            "de": "Seit",
+            "es": "Desde",
+            "fr": "Depuis"
+          }
+        }
+      ],
+      "returns": [
+        {
+          "key": "repositories",
+          "type": "string",
+          "list": true
+        },
+        {
+          "key": "numbers",
+          "type": "int",
+          "list": true
+        },
+        {
+          "key": "titles",
+          "type": "string",
+          "list": true
+        },
+        {
+          "key": "urls",
+          "type": "url",
+          "list": true
+        },
+        {
+          "key": "statuses",
+          "type": "string",
+          "label": {
+            "en": "Status",
+            "de": "Status",
+            "es": "Estado",
+            "fr": "État"
+          },
+          "list": true
+        },
+        {
+          "key": "reviews",
+          "type": "string",
+          "label": {
+            "en": "Review",
+            "de": "Review",
+            "es": "Revisión",
+            "fr": "Revue"
+          },
+          "list": true
+        },
+        {
+          "key": "checks",
+          "type": "string",
+          "label": {
+            "en": "Checks",
+            "de": "Checks",
+            "es": "Comprobaciones",
+            "fr": "Vérifications"
+          },
+          "list": true
+        },
+        {
+          "key": "count",
+          "type": "int",
+          "label": {
+            "en": "How many",
+            "de": "Wie viele",
+            "es": "Cuántos",
+            "fr": "Combien"
+          }
+        },
+        {
+          "key": "total",
+          "type": "int",
+          "label": {
+            "en": "How many in all",
+            "de": "Wie viele insgesamt",
+            "es": "Cuántos en total",
+            "fr": "Combien en tout"
+          }
+        },
+        {
+          "key": "unavailable",
+          "type": "string",
+          "label": {
+            "en": "Why there is no answer",
+            "de": "Warum es keine Antwort gibt",
+            "es": "Por qué no hay respuesta",
+            "fr": "Pourquoi il n'y a pas de réponse"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "\"https://api.github.com/graphql\"",
+        "headers": {
+          "Accept": "\"application/vnd.github+json\"",
+          "X-GitHub-Api-Version": "\"2022-11-28\"",
+          "User-Agent": "\"initiative-github\""
+        },
+        "graphql": {
+          "query": "query Updated($query: String!, $first: Int!) { search(query: $query, type: ISSUE, first: $first) { issueCount nodes { ... on PullRequest { number title url state isDraft merged repository { nameWithOwner } reviewDecision statusCheckRollup { state } } } } }",
+          "variables": "{\n      \"query\": $join([\n        \"type:pr\",\n        (connections.workspace.owner_type = \"User\" ? \"user:\" : \"org:\") & connections.workspace.owner,\n        \"updated:>=\" & $fromMillis(params.since ? $toMillis(params.since) : $millis() - 86400000, \"[Y0001]-[M01]-[D01]T[H01]:[m01]:[s01]+00:00\"),\n        \"sort:updated-desc\"\n      ], \" \"),\n      \"first\": 100\n    }"
+        },
+        "connection": "workspace"
+      },
+      "errors": [
+        {
+          "status": 403,
+          "when": "$exists(response.headers.\"retry-after\") or response.headers.\"x-ratelimit-remaining\" = \"0\"",
+          "code": "transient"
+        },
+        {
+          "status": "2xx",
+          "when": "response.body.errors[type = \"RATE_LIMITED\"]",
+          "code": "transient"
+        },
+        {
+          "status": "2xx",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
+          "code": "not-authorized"
+        },
+        {
+          "status": "2xx",
+          "when": "response.body.errors and $not($exists(response.body.data) and $boolean(response.body.data))",
+          "code": "invalid"
+        }
+      ],
+      "map": "(\n    $status := function($merged, $state, $draft) {\n  $merged = true ? \"merged\" : $lowercase($string($state)) = \"closed\" ? \"closed\" : $draft = true ? \"draft\" : \"open\"\n};\n    \n  $refused := $exists(response.body.errors[\"statusCheckRollup\" in path]);\n  $review := function($decision) {\n    $decision = null ? \"unreviewed\"\n    : $decision = \"APPROVED\" ? \"approved\"\n    : $decision = \"CHANGES_REQUESTED\" ? \"changes_requested\"\n    : $decision = \"REVIEW_REQUIRED\" ? \"review_required\"\n    : \"\"\n  };\n  $checks := function($rollup) {\n    $rollup = null ? ($refused ? \"\" : \"none\")\n    : $rollup.state = \"SUCCESS\" ? \"passing\"\n    : $rollup.state in [\"FAILURE\", \"ERROR\"] ? \"failing\"\n    : $rollup.state in [\"PENDING\", \"EXPECTED\"] ? \"pending\"\n    : \"\"\n  };\n    $search := response.body.data.search;\n    $pulls := $search.nodes[$type(number) = \"number\" and $type(repository.nameWithOwner) = \"string\"];\n    {\n      \"repositories\": [$pulls.repository.nameWithOwner],\n      \"numbers\": [$pulls.number],\n      \"titles\": [$pulls.(title ? title : \"\")],\n      \"urls\": [$pulls.(url ? url : \"\")],\n      \"statuses\": [$pulls.$status(merged, state, isDraft)],\n      \"reviews\": [$pulls.$review(reviewDecision)],\n      \"checks\": [$pulls.$checks(statusCheckRollup)],\n      \"count\": $count($pulls),\n      \"total\": $search.issueCount\n    }\n  )"
     },
     {
       "id": "plugin.beyonders-studio.github.open-issue",
@@ -3269,7 +3513,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -3404,7 +3648,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -3536,7 +3780,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -3654,7 +3898,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -3817,7 +4061,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -3960,7 +4204,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -4106,7 +4350,7 @@
         },
         {
           "status": "2xx",
-          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"]]",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
           "code": "not-authorized"
         },
         {
@@ -4116,6 +4360,183 @@
         }
       ],
       "map": "(\n    $moved := response.body.data.updateProjectV2ItemFieldValue.projectV2Item.id;\n    {\"item_id\": $moved ? $moved : params.item_id}\n  )"
+    },
+    {
+      "id": "plugin.beyonders-studio.github.start-branch",
+      "direction": "write",
+      "label": {
+        "en": "Start a branch",
+        "de": "Branch anlegen",
+        "es": "Crear una rama",
+        "fr": "Créer une branche"
+      },
+      "description": {
+        "en": "Creates a branch named after the task, from a base branch, as the member.",
+        "de": "Legt als das Mitglied einen nach der Aufgabe benannten Branch an, ab einem Basis-Branch.",
+        "es": "Crea una rama con el nombre de la tarea, a partir de una rama base, como el miembro.",
+        "fr": "Crée une branche au nom de la tâche, depuis une branche de base, en tant que le membre."
+      },
+      "group": "repositories",
+      "actors": [
+        "member"
+      ],
+      "requires": {
+        "all_of": [
+          "workspace",
+          "account"
+        ]
+      },
+      "params": [
+        {
+          "key": "repo",
+          "type": "string",
+          "label": {
+            "en": "Repository",
+            "de": "Repository",
+            "es": "Repositorio",
+            "fr": "Dépôt"
+          },
+          "options_from": {
+            "endpoint": "plugin.beyonders-studio.github.list-repositories",
+            "key": "names"
+          }
+        },
+        {
+          "key": "base",
+          "type": "string",
+          "label": {
+            "en": "Base branch",
+            "de": "Basis-Branch",
+            "es": "Rama base",
+            "fr": "Branche de base"
+          },
+          "required": true,
+          "options_from": {
+            "endpoint": "plugin.beyonders-studio.github.list-branches",
+            "key": "names",
+            "needs": {
+              "repo": "repo"
+            }
+          }
+        }
+      ],
+      "returns": [
+        {
+          "key": "repository",
+          "type": "string"
+        },
+        {
+          "key": "owner",
+          "type": "string"
+        },
+        {
+          "key": "name",
+          "type": "string",
+          "label": {
+            "en": "Branch",
+            "de": "Branch",
+            "es": "Rama",
+            "fr": "Branche"
+          }
+        },
+        {
+          "key": "url",
+          "type": "url"
+        }
+      ],
+      "steps": [
+        {
+          "name": "base",
+          "request": {
+            "method": "GET",
+            "url": "\"https://api.github.com\" & \"/repos/\" & connections.workspace.owner & \"/\" & (\n  $repo := params.repo;\n  $type($repo) = \"string\" and $length($repo) <= 100 and $contains($repo, /^[A-Za-z0-9._-]+$/) and $not($repo in [\".\", \"..\"])\n    ? $repo : \"\"\n) & \"/git/ref/heads/\" & (\n  $base := params.base;\n  $type($base) = \"string\" and $length($base) <= 255\n    and $contains($base, /^[A-Za-z0-9._-]+(\\/[A-Za-z0-9._-]+)*$/)\n    and $not($contains($base, /(^|\\/)\\.|\\.\\.|\\.lock(\\/|$)|\\.$/))\n    ? $base : \"\"\n)",
+            "headers": {
+              "Accept": "\"application/vnd.github+json\"",
+              "X-GitHub-Api-Version": "\"2022-11-28\"",
+              "User-Agent": "\"initiative-github\""
+            },
+            "connection": "account"
+          }
+        },
+        {
+          "name": "branch",
+          "request": {
+            "method": "POST",
+            "url": "\"https://api.github.com\" & \"/repos/\" & connections.workspace.owner & \"/\" & (\n  $repo := params.repo;\n  $type($repo) = \"string\" and $length($repo) <= 100 and $contains($repo, /^[A-Za-z0-9._-]+$/) and $not($repo in [\".\", \"..\"])\n    ? $repo : \"\"\n) & \"/git/refs\"",
+            "headers": {
+              "Accept": "\"application/vnd.github+json\"",
+              "X-GitHub-Api-Version": "\"2022-11-28\"",
+              "User-Agent": "\"initiative-github\""
+            },
+            "connection": "account",
+            "body": "{\"ref\": \"refs/heads/\" & (\n  $slug := $lowercase($replace($replace(item.title, /[^A-Za-z0-9]+/, \"-\"), /^-+|-+$/, \"\"));\n  $slug := $replace($substring($slug, 0, 50), /-+$/, \"\");\n  settings.task_prefix & \"-\" & item.id & ($slug ? \"-\" & $slug : \"\")\n), \"sha\": steps.base.body.object.sha}"
+          }
+        }
+      ],
+      "unavailable": [
+        "repository-required",
+        "branch-required",
+        "reference-required",
+        "branch-exists"
+      ],
+      "errors": [
+        {
+          "status": "2xx",
+          "when": "(\n  $repo := params.repo;\n  $type($repo) = \"string\" and $length($repo) <= 100 and $contains($repo, /^[A-Za-z0-9._-]+$/) and $not($repo in [\".\", \"..\"])\n    ? $repo : \"\"\n) = \"\"",
+          "code": "repository-required"
+        },
+        {
+          "status": "4xx",
+          "when": "(\n  $repo := params.repo;\n  $type($repo) = \"string\" and $length($repo) <= 100 and $contains($repo, /^[A-Za-z0-9._-]+$/) and $not($repo in [\".\", \"..\"])\n    ? $repo : \"\"\n) = \"\"",
+          "code": "repository-required"
+        },
+        {
+          "status": "2xx",
+          "when": "(\n  $base := params.base;\n  $type($base) = \"string\" and $length($base) <= 255\n    and $contains($base, /^[A-Za-z0-9._-]+(\\/[A-Za-z0-9._-]+)*$/)\n    and $not($contains($base, /(^|\\/)\\.|\\.\\.|\\.lock(\\/|$)|\\.$/))\n    ? $base : \"\"\n) = \"\"",
+          "code": "branch-required"
+        },
+        {
+          "status": "4xx",
+          "when": "(\n  $base := params.base;\n  $type($base) = \"string\" and $length($base) <= 255\n    and $contains($base, /^[A-Za-z0-9._-]+(\\/[A-Za-z0-9._-]+)*$/)\n    and $not($contains($base, /(^|\\/)\\.|\\.\\.|\\.lock(\\/|$)|\\.$/))\n    ? $base : \"\"\n) = \"\"",
+          "code": "branch-required"
+        },
+        {
+          "status": "2xx",
+          "when": "$not($type(settings.task_prefix) = \"string\" and settings.task_prefix != \"\" and $type(item.id) = \"number\")",
+          "code": "reference-required"
+        },
+        {
+          "status": "4xx",
+          "when": "$not($type(settings.task_prefix) = \"string\" and settings.task_prefix != \"\" and $type(item.id) = \"number\")",
+          "code": "reference-required"
+        },
+        {
+          "status": 403,
+          "when": "$exists(response.headers.\"retry-after\") or response.headers.\"x-ratelimit-remaining\" = \"0\"",
+          "code": "transient"
+        },
+        {
+          "status": "2xx",
+          "when": "response.body.errors[type = \"RATE_LIMITED\"]",
+          "code": "transient"
+        },
+        {
+          "status": "2xx",
+          "when": "response.body.errors[type in [\"FORBIDDEN\", \"INSUFFICIENT_SCOPES\"] and $not(\"statusCheckRollup\" in path)]",
+          "code": "not-authorized"
+        },
+        {
+          "status": "2xx",
+          "when": "response.body.errors and $not($exists(response.body.data) and $boolean(response.body.data))",
+          "code": "invalid"
+        },
+        {
+          "status": 422,
+          "when": "$contains(response.body.message, /already exists/i)",
+          "code": "branch-exists"
+        }
+      ],
+      "map": "(\n    $name := $substringAfter(response.body.ref, \"refs/heads/\");\n    {\n      \"repository\": (\n  $repo := params.repo;\n  $type($repo) = \"string\" and $length($repo) <= 100 and $contains($repo, /^[A-Za-z0-9._-]+$/) and $not($repo in [\".\", \"..\"])\n    ? $repo : \"\"\n),\n      \"owner\": connections.workspace.owner,\n      \"name\": $name,\n      \"url\": $encodeUrl(\"https://github.com/\" & connections.workspace.owner & \"/\" & (\n  $repo := params.repo;\n  $type($repo) = \"string\" and $length($repo) <= 100 and $contains($repo, /^[A-Za-z0-9._-]+$/) and $not($repo in [\".\", \"..\"])\n    ? $repo : \"\"\n) & \"/tree/\" & $name)\n    }\n  )"
     },
     {
       "id": "plugin.beyonders-studio.github.issue-opened",
@@ -4722,5 +5143,395 @@
         }
       ]
     }
-  ]
+  ],
+  "fields": [
+    {
+      "key": "github.pull_requests",
+      "name": {
+        "en": "Pull requests",
+        "de": "Pull Requests",
+        "es": "Pull requests",
+        "fr": "Pull requests"
+      },
+      "kind": "link",
+      "list": true,
+      "on": [
+        "task"
+      ],
+      "description": {
+        "en": "The pull requests that name this task, with their status, review and checks.",
+        "de": "Die Pull Requests, die diese Aufgabe nennen, mit Status, Review und Checks.",
+        "es": "Las pull requests que nombran esta tarea, con su estado, revisión y comprobaciones.",
+        "fr": "Les pull requests qui nomment cette tâche, avec leur état, leur revue et leurs vérifications."
+      },
+      "states": {
+        "status": {
+          "name": {
+            "en": "Status",
+            "de": "Status",
+            "es": "Estado",
+            "fr": "État"
+          },
+          "values": {
+            "draft": {
+              "label": {
+                "en": "Draft",
+                "de": "Entwurf",
+                "es": "Borrador",
+                "fr": "Brouillon"
+              },
+              "tone": "muted"
+            },
+            "open": {
+              "label": {
+                "en": "Open",
+                "de": "Offen",
+                "es": "Abierta",
+                "fr": "Ouverte"
+              },
+              "tone": "accent"
+            },
+            "merged": {
+              "label": {
+                "en": "Merged",
+                "de": "Gemergt",
+                "es": "Fusionada",
+                "fr": "Fusionnée"
+              },
+              "tone": "positive"
+            },
+            "closed": {
+              "label": {
+                "en": "Closed",
+                "de": "Geschlossen",
+                "es": "Cerrada",
+                "fr": "Fermée"
+              },
+              "tone": "muted"
+            }
+          }
+        },
+        "review": {
+          "name": {
+            "en": "Review",
+            "de": "Review",
+            "es": "Revisión",
+            "fr": "Revue"
+          },
+          "values": {
+            "approved": {
+              "label": {
+                "en": "Approved",
+                "de": "Genehmigt",
+                "es": "Aprobada",
+                "fr": "Approuvée"
+              },
+              "tone": "positive"
+            },
+            "changes_requested": {
+              "label": {
+                "en": "Changes requested",
+                "de": "Änderungen angefragt",
+                "es": "Cambios solicitados",
+                "fr": "Modifications demandées"
+              },
+              "tone": "negative"
+            },
+            "review_required": {
+              "label": {
+                "en": "Review required",
+                "de": "Review erforderlich",
+                "es": "Revisión necesaria",
+                "fr": "Revue requise"
+              },
+              "tone": "warning"
+            },
+            "unreviewed": {
+              "label": {
+                "en": "No review",
+                "de": "Keine Review",
+                "es": "Sin revisión",
+                "fr": "Sans revue"
+              },
+              "tone": "muted"
+            }
+          }
+        },
+        "checks": {
+          "name": {
+            "en": "Checks",
+            "de": "Checks",
+            "es": "Comprobaciones",
+            "fr": "Vérifications"
+          },
+          "values": {
+            "passing": {
+              "label": {
+                "en": "Passing",
+                "de": "Bestanden",
+                "es": "Correctas",
+                "fr": "Réussies"
+              },
+              "tone": "positive"
+            },
+            "failing": {
+              "label": {
+                "en": "Failing",
+                "de": "Fehlgeschlagen",
+                "es": "Fallidas",
+                "fr": "En échec"
+              },
+              "tone": "negative"
+            },
+            "pending": {
+              "label": {
+                "en": "Pending",
+                "de": "Ausstehend",
+                "es": "En curso",
+                "fr": "En cours"
+              },
+              "tone": "warning"
+            },
+            "none": {
+              "label": {
+                "en": "No checks",
+                "de": "Keine Checks",
+                "es": "Sin comprobaciones",
+                "fr": "Aucune vérification"
+              },
+              "tone": "muted"
+            }
+          }
+        }
+      },
+      "actions": [
+        "unlink"
+      ]
+    },
+    {
+      "key": "github.branches",
+      "name": {
+        "en": "Branches",
+        "de": "Branches",
+        "es": "Ramas",
+        "fr": "Branches"
+      },
+      "kind": "link",
+      "list": true,
+      "on": [
+        "task"
+      ],
+      "description": {
+        "en": "The branches that name this task, and whether each is still in GitHub.",
+        "de": "Die Branches, die diese Aufgabe nennen, und ob es jeden noch in GitHub gibt.",
+        "es": "Las ramas que nombran esta tarea, y si cada una sigue en GitHub.",
+        "fr": "Les branches qui nomment cette tâche, et si chacune est encore dans GitHub."
+      },
+      "states": {
+        "status": {
+          "name": {
+            "en": "Status",
+            "de": "Status",
+            "es": "Estado",
+            "fr": "État"
+          },
+          "values": {
+            "present": {
+              "label": {
+                "en": "Present",
+                "de": "Vorhanden",
+                "es": "Presente",
+                "fr": "Présente"
+              },
+              "tone": "accent"
+            },
+            "deleted": {
+              "label": {
+                "en": "Deleted",
+                "de": "Gelöscht",
+                "es": "Eliminada",
+                "fr": "Supprimée"
+              },
+              "tone": "muted"
+            }
+          }
+        }
+      },
+      "actions": [
+        "unlink"
+      ]
+    }
+  ],
+  "parts": [
+    {
+      "id": "github",
+      "name": {
+        "en": "GitHub",
+        "de": "GitHub",
+        "es": "GitHub",
+        "fr": "GitHub"
+      },
+      "on": [
+        "task"
+      ],
+      "description": {
+        "en": "The task's branches and pull requests, and how to link more.",
+        "de": "Die Branches und Pull Requests der Aufgabe, und wie man weitere verknüpft.",
+        "es": "Las ramas y pull requests de la tarea, y cómo vincular más.",
+        "fr": "Les branches et pull requests de la tâche, et comment en lier d'autres."
+      },
+      "tree": {
+        "type": "section",
+        "props": {
+          "title": {
+            "en": "GitHub",
+            "de": "GitHub",
+            "es": "GitHub",
+            "fr": "GitHub"
+          }
+        },
+        "children": [
+          {
+            "type": "text",
+            "props": {
+              "text": {
+                "en": "Start a branch name with {settings.task_prefix}-{item.id} to link it here.",
+                "de": "Beginne einen Branch-Namen mit {settings.task_prefix}-{item.id}, um ihn hier zu verknüpfen.",
+                "es": "Empieza el nombre de una rama con {settings.task_prefix}-{item.id} para vincularla aquí.",
+                "fr": "Commencez le nom d'une branche par {settings.task_prefix}-{item.id} pour la lier ici."
+              },
+              "tone": "muted"
+            }
+          },
+          {
+            "type": "text",
+            "props": {
+              "text": {
+                "en": "Or put {settings.task_prefix}-{item.id} in a pull request's title or description.",
+                "de": "Oder schreib {settings.task_prefix}-{item.id} in den Titel oder die Beschreibung eines Pull Requests.",
+                "es": "O pon {settings.task_prefix}-{item.id} en el título o la descripción de una pull request.",
+                "fr": "Ou mettez {settings.task_prefix}-{item.id} dans le titre ou la description d'une pull request."
+              },
+              "tone": "muted"
+            }
+          },
+          {
+            "type": "field",
+            "props": {
+              "field": "github.pull_requests"
+            }
+          },
+          {
+            "type": "field",
+            "props": {
+              "field": "github.branches"
+            }
+          },
+          {
+            "type": "stack",
+            "props": {
+              "direction": "row",
+              "gap": "small",
+              "wrap": true
+            },
+            "children": [
+              {
+                "type": "button",
+                "props": {
+                  "action": "start-branch",
+                  "variant": "secondary"
+                }
+              },
+              {
+                "type": "button",
+                "props": {
+                  "action": "link-pull-request",
+                  "variant": "ghost"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "start-branch",
+      "name": {
+        "en": "Start a branch",
+        "de": "Branch anlegen",
+        "es": "Crear una rama",
+        "fr": "Créer une branche"
+      },
+      "endpoint": "plugin.beyonders-studio.github.start-branch",
+      "params": [
+        "repo",
+        "base"
+      ],
+      "on": [
+        "task"
+      ],
+      "menu": true,
+      "write": "(\n      $ref := \"branch:\" & $lowercase(result.owner & \"/\" & result.repository) & \":\" & result.name;\n      {\"upsert\": {\"github.branches\": [{\"ref\": $ref, \"url\": result.url, \"text\": result.name, \"state\": {\"status\": \"present\"}}]}}\n    )"
+    },
+    {
+      "id": "link-pull-request",
+      "name": {
+        "en": "Link a pull request",
+        "de": "Pull Request verknüpfen",
+        "es": "Vincular una pull request",
+        "fr": "Lier une pull request"
+      },
+      "endpoint": "plugin.beyonders-studio.github.get-pull-request",
+      "params": [
+        "repo",
+        "number"
+      ],
+      "on": [
+        "task"
+      ],
+      "menu": true,
+      "write": "(\n      $status := function($merged, $state, $draft) {\n  $merged = true ? \"merged\" : $lowercase($string($state)) = \"closed\" ? \"closed\" : $draft = true ? \"draft\" : \"open\"\n};\n      $ref := \"pr:\" & $lowercase(result.owner & \"/\" & result.repository) & \"#\" & result.number;\n      {\"upsert\": {\"github.pull_requests\": [\n        {\"ref\": $ref, \"url\": result.url, \"text\": \"#\" & result.number & \" \" & result.title, \"state\": $merge([{\"status\": $status(result.merged, result.state, result.draft)}, result.review ? {\"review\": result.review}, result.checks ? {\"checks\": result.checks}])}\n      ]}}\n    )"
+    },
+    {
+      "id": "unlink",
+      "name": {
+        "en": "Unlink",
+        "de": "Verknüpfung lösen",
+        "es": "Desvincular",
+        "fr": "Délier"
+      },
+      "on": [
+        "task"
+      ],
+      "write": "$type(element) = \"string\" ? (\n      $substring(element, 0, 3) = \"pr:\"\n        ? {\"remove\": {\"github.pull_requests\": [element]}}\n        : {\"remove\": {\"github.branches\": [element]}}\n    )"
+    }
+  ],
+  "settings": [
+    {
+      "key": "task_prefix",
+      "type": "string",
+      "label": {
+        "en": "Task reference prefix",
+        "de": "Präfix der Aufgabenreferenzen",
+        "es": "Prefijo de referencia de tareas",
+        "fr": "Préfixe des références de tâches"
+      },
+      "description": {
+        "en": "A branch or pull request that names a task as this prefix and its number, such as acme-42, links to it.",
+        "de": "Branches und Pull Requests, die eine Aufgabe mit diesem Präfix und ihrer Nummer nennen (etwa acme-42), werden verknüpft.",
+        "es": "Una rama o pull request que nombra una tarea con este prefijo y su número, como acme-42, se vincula a ella.",
+        "fr": "Une branche ou pull request qui nomme une tâche par ce préfixe et son numéro, comme acme-42, y est liée."
+      },
+      "unique": true,
+      "assigned": "community_name"
+    }
+  ],
+  "help": {
+    "en": "**Linking work to tasks.** Every task has a reference: this community's prefix and the task's number, such as `acme-42`. A task's GitHub section shows its own.\n\n- A **branch** whose name holds the reference links to the task when it is pushed. **Start a branch** creates one in GitHub for you, as you.\n- A **pull request** links when its branch, title or description holds the reference, and stays linked when it is renamed. **Link a pull request** adds one by hand.\n- **Unlink** takes a link off the task. While GitHub still names the task, the link comes back on the pull request's next push, merge or reopen: remove the reference in GitHub to unlink it for good.\n- A branch deleted in GitHub shows as deleted.\n- Each pull request shows its status, its review and its checks. Checks settle within about 15 minutes.\n- An automation can move a task when its linked pull request merges.\n\nAn admin can rename the prefix in the plug-in's settings; references made with an earlier one still link. A prefix is unique on this server only: if another server's own GitHub App also watches your organization, it links references by its own prefixes.",
+    "de": "**Arbeit mit Aufgaben verknüpfen.** Jede Aufgabe hat eine Referenz: das Präfix dieser Community und die Nummer der Aufgabe, etwa `acme-42`. Der GitHub-Bereich einer Aufgabe zeigt ihre.\n\n- Ein **Branch**, dessen Name die Referenz enthält, wird beim Pushen mit der Aufgabe verknüpft. **Branch anlegen** legt ihn für dich in GitHub an, als du.\n- Ein **Pull Request** wird verknüpft, wenn sein Branch, sein Titel oder seine Beschreibung die Referenz enthält, und bleibt es, wenn er umbenannt wird. **Pull Request verknüpfen** fügt einen von Hand hinzu.\n- **Verknüpfung lösen** nimmt eine Verknüpfung von der Aufgabe. Solange GitHub die Aufgabe noch nennt, kommt sie beim nächsten Push, Merge oder Wiedereröffnen des Pull Requests zurück: Entferne die Referenz in GitHub, um sie dauerhaft zu lösen.\n- Ein in GitHub gelöschter Branch wird als gelöscht angezeigt.\n- Jeder Pull Request zeigt seinen Status, seine Review und seine Checks. Checks stehen nach etwa 15 Minuten fest.\n- Eine Automatisierung kann eine Aufgabe verschieben, wenn ihr verknüpfter Pull Request gemergt wird.\n\nEin Admin kann das Präfix in den Einstellungen des Plug-ins umbenennen; Referenzen mit einem früheren verknüpfen weiter. Ein Präfix ist nur auf diesem Server eindeutig: Beobachtet die eigene GitHub-App eines anderen Servers deine Organisation ebenfalls, verknüpft sie Referenzen nach ihren eigenen Präfixen.",
+    "es": "**Vincular el trabajo con las tareas.** Cada tarea tiene una referencia: el prefijo de esta comunidad y el número de la tarea, como `acme-42`. La sección de GitHub de una tarea muestra la suya.\n\n- Una **rama** cuyo nombre contiene la referencia se vincula con la tarea al subirla. **Crear una rama** la crea en GitHub por ti, como tú.\n- Una **pull request** se vincula cuando su rama, su título o su descripción contienen la referencia, y sigue vinculada si cambia de nombre. **Vincular una pull request** añade una a mano.\n- **Desvincular** quita un vínculo de la tarea. Mientras GitHub siga nombrando la tarea, el vínculo vuelve con el siguiente push, fusión o reapertura de la pull request: quita la referencia en GitHub para desvincularla del todo.\n- Una rama eliminada en GitHub aparece como eliminada.\n- Cada pull request muestra su estado, su revisión y sus comprobaciones. Las comprobaciones se asientan en unos 15 minutos.\n- Una automatización puede mover una tarea cuando su pull request vinculada se fusiona.\n\nUn administrador puede cambiar el prefijo en los ajustes del plug-in; las referencias con uno anterior siguen vinculando. Un prefijo es único solo en este servidor: si la propia GitHub App de otro servidor también observa tu organización, vincula las referencias según sus propios prefijos.",
+    "fr": "**Lier le travail aux tâches.** Chaque tâche a une référence : le préfixe de cette communauté et le numéro de la tâche, comme `acme-42`. La section GitHub d'une tâche affiche la sienne.\n\n- Une **branche** dont le nom contient la référence est liée à la tâche quand elle est poussée. **Créer une branche** la crée dans GitHub pour vous, en votre nom.\n- Une **pull request** est liée quand sa branche, son titre ou sa description contient la référence, et le reste si elle est renommée. **Lier une pull request** en ajoute une à la main.\n- **Délier** retire un lien de la tâche. Tant que GitHub nomme encore la tâche, le lien revient au prochain push, à la fusion ou à la réouverture de la pull request : retirez la référence dans GitHub pour la délier pour de bon.\n- Une branche supprimée dans GitHub apparaît comme supprimée.\n- Chaque pull request affiche son état, sa revue et ses vérifications. Les vérifications se stabilisent en 15 minutes environ.\n- Une automatisation peut déplacer une tâche quand sa pull request liée est fusionnée.\n\nUn admin peut renommer le préfixe dans les réglages du plug-in ; les références faites avec un ancien préfixe lient toujours. Un préfixe n'est unique que sur ce serveur : si la propre GitHub App d'un autre serveur observe aussi votre organisation, elle lie les références selon ses propres préfixes."
+  }
 }

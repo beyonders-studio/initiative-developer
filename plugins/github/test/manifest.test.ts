@@ -7,10 +7,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { validateManifest, type Manifest } from "initiative-plugin-sdk/manifest";
+import { validateManifest, type Manifest, type PartNode } from "initiative-plugin-sdk/manifest";
 import { describe, expect, it } from "vitest";
 
-import { ACCOUNT, LISTING_UID, READ, READ_IDS, WORKSPACE } from "../src/vocabulary.js";
+import { ACCOUNT, declare, LISTING_UID, READ, READ_IDS, WORKSPACE, WRITE } from "../src/vocabulary.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const source = join(root, "..", "..", "registry", "sources", "beyonders-studio", LISTING_UID);
@@ -45,26 +45,40 @@ function later(a: string, b: string): boolean {
 
 const connection = (id: string) => manifest.connections!.find((one) => one.id === id)!;
 
+/** The words a part's tree draws: its sections' titles and its texts. */
+const words = (node: PartNode): unknown[] => [
+  ...(node.type === "section" && node.props?.title ? [node.props.title] : []),
+  ...(node.type === "text" ? [node.props.text] : []),
+  ...("children" in node ? (node.children ?? []).flatMap(words) : []),
+];
+
 describe("manifest", () => {
   it("passes the SDK's validation", () => {
     expect(validateManifest(manifest)).toEqual([]);
   });
 
-  it("declares fifteen reads, seven writes and six announcements", () => {
+  it("declares sixteen reads, eight writes and six announcements", () => {
     const counts: Record<string, number> = {};
     for (const endpoint of manifest.endpoints ?? []) counts[endpoint.direction] = (counts[endpoint.direction] ?? 0) + 1;
-    expect(counts).toEqual({ read: 15, write: 7, emit: 6 });
+    expect(counts).toEqual({ read: 16, write: 8, emit: 6 });
   });
 
-  it("is declarative: Initiative calls GitHub itself, and runs no service", () => {
+  it("is declarative: Initiative calls GitHub itself, runs no service, and keeps links on the tasks it may read", () => {
     expect(manifest.hosts).toEqual(["api.github.com"]);
+    expect(manifest.scopes).toEqual(["projects:read"]);
     expect(Object.keys(manifest).sort()).toEqual(
       [
         ...Object.keys(service)
-          .filter((key) => key !== "service" && key !== "schedules")
+          .filter((key) => key !== "service")
           .map((key) => (key === "app_kind" ? "plugin_kind" : key)),
         "hosts",
         "min_plugin_api",
+        "scopes",
+        "fields",
+        "parts",
+        "actions",
+        "settings",
+        "help",
       ].sort()
     );
   });
@@ -73,12 +87,22 @@ describe("manifest", () => {
     expect(manifest.min_plugin_api).toBe("6.0");
   });
 
-  it("keeps every endpoint 2.6.0 had as it was, and adds the review queue", () => {
+  it("keeps every endpoint 2.6.0 had, a pull request's adding its review and checks, and adds the review queue", () => {
     const terms = ({ id, direction, params, returns, public: open, actors, identity }: NonNullable<Manifest["endpoints"]>[number]) =>
       ({ id, direction, params, returns, public: open, actors, identity });
     const before = unprefixed(service.endpoints!.map(terms));
     const after = unprefixed(manifest.endpoints!.map(terms));
-    expect(after.filter((endpoint) => endpoint.id !== READ.reviewQueue)).toEqual(before);
+    const added = [READ.reviewQueue, READ.recentlyUpdated, WRITE.startBranch] as string[];
+    const said = (value: { key: string }) => ["review", "checks"].includes(value.key);
+    const kept = after
+      .filter((endpoint) => !added.includes(endpoint.id))
+      .map((endpoint) => (endpoint.id === READ.getPullRequest ? { ...endpoint, returns: endpoint.returns!.filter((value) => !said(value)) } : endpoint));
+    expect(kept).toEqual(before);
+    const pull = after.find((endpoint) => endpoint.id === READ.getPullRequest)!;
+    expect(pull.returns!.filter(said).map(({ key, type }) => [key, type])).toEqual([
+      ["review", "string"],
+      ["checks", "string"],
+    ]);
     expect(after.find((endpoint) => endpoint.id === READ.reviewQueue)).toEqual({
       ...before.find((endpoint) => endpoint.id === READ.findPullRequests),
       id: READ.reviewQueue,
@@ -89,7 +113,18 @@ describe("manifest", () => {
     });
   });
 
-  it("names every endpoint, widget and connection in four languages", () => {
+  it("names every endpoint, widget, connection, field, part, action and setting in four languages", () => {
+    // What a task's GitHub section draws, which Initiative cuts at 120 characters.
+    const linking = [
+      ...(manifest.fields ?? []).flatMap((field) => [
+        field.name,
+        field.description,
+        ...Object.values(field.states ?? {}).flatMap((facet) => [facet.name, ...Object.values(facet.values).map((value) => value.label)]),
+      ]),
+      ...(manifest.parts ?? []).flatMap((part) => [part.name, part.description, ...words(part.tree)]),
+      ...(manifest.actions ?? []).map((action) => action.name),
+      ...(manifest.settings ?? []).flatMap((setting) => [setting.label, setting.description]),
+    ];
     const texts = [
       ...(manifest.endpoints ?? []).flatMap((endpoint) => [endpoint.label, endpoint.description]),
       ...(manifest.widgets ?? []).flatMap((widget) => [
@@ -99,8 +134,13 @@ describe("manifest", () => {
       ...(manifest.connections ?? []).map((connection) => connection.label),
       manifest.vendor!.label,
       ...manifest.vendor!.fields.map((field) => field.label),
+      ...linking,
+      manifest.help,
     ];
     for (const localized of texts) expect(Object.keys(localized as object).sort()).toEqual(["de", "en", "es", "fr"]);
+    for (const text of linking.flatMap((localized) => Object.values(localized as Record<string, string>))) {
+      expect(text.length, text).toBeLessThanOrEqual(120);
+    }
   });
 
   it("makes every write run as the member, never as the plug-in", () => {
@@ -110,9 +150,10 @@ describe("manifest", () => {
     }
   });
 
-  it("offers every read and write to other plug-ins, and no announcement", () => {
+  it("offers every read and write to other plug-ins but the task's own Start a branch, and no announcement", () => {
     for (const endpoint of manifest.endpoints ?? []) {
-      if (endpoint.direction === "emit") {
+      // Start a branch names the branch after the task its action runs on.
+      if (endpoint.direction === "emit" || endpoint.id === declare(WRITE.startBranch)) {
         expect(endpoint.public).toBeUndefined();
         continue;
       }
@@ -147,7 +188,7 @@ describe("manifest", () => {
       events: expect.any(Array),
       status: expect.any(Array),
     });
-    expect(manifest.webhooks!.events!.map((event) => event.emit)).toEqual(
+    expect(manifest.webhooks!.events!.flatMap((event) => (event.emit ? [event.emit] : []))).toEqual(
       manifest.endpoints!.filter((endpoint) => endpoint.direction === "emit").map((endpoint) => endpoint.id)
     );
 
@@ -194,12 +235,14 @@ describe("manifest", () => {
         default_permissions: {
           issues: "write",
           pull_requests: "write",
-          contents: "read",
+          contents: "write",
+          checks: "read",
+          statuses: "read",
           vulnerability_alerts: "read",
           organization_projects: "write",
           metadata: "read",
         },
-        default_events: ["issues", "pull_request", "release", "create"],
+        default_events: ["issues", "pull_request", "release", "create", "delete", "pull_request_review", "check_suite"],
       },
       values: {
         client_id: "client_id",

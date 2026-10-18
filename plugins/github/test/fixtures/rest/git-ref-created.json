@@ -1,0 +1,10 @@
+{
+  "ref": "refs/heads/acme-42-fix-sign-in-on-the-mobile-app",
+  "node_id": "REF_new",
+  "url": "https://api.github.com/repos/acme/widgets/git/refs/heads/acme-42-fix-sign-in-on-the-mobile-app",
+  "object": {
+    "sha": "aa218f56b14c9653891f9e74264a383fa43fefbd",
+    "type": "commit",
+    "url": "https://api.github.com/repos/acme/widgets/git/commits/aa218f56b14c9653891f9e74264a383fa43fefbd"
+  }
+}

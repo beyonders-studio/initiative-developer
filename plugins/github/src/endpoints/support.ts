@@ -102,12 +102,19 @@ const RATE_LIMITED = `$exists(response.headers."retry-after") or response.header
 /**
  * GitHub's limits are passing failures. A GraphQL answer is 200 even when it
  * is refused, so a refusal is read from its errors; an answer with errors and
- * no data at all is a question GitHub could not take.
+ * no data at all is a question GitHub could not take. A pull request's checks
+ * (`statusCheckRollup`) need permissions an organization may not have granted
+ * yet: GitHub then answers everything else and refuses that field alone, and
+ * the answer stands with its checks unknown ({@link ROLLUP_REFUSED}).
  */
 export const GITHUB_ERRORS: ErrorRule[] = [
   { status: 403, when: RATE_LIMITED, code: "transient" },
   { status: "2xx", when: `response.body.errors[type = "RATE_LIMITED"]`, code: "transient" },
-  { status: "2xx", when: `response.body.errors[type in ["FORBIDDEN", "INSUFFICIENT_SCOPES"]]`, code: "not-authorized" },
+  {
+    status: "2xx",
+    when: `response.body.errors[type in ["FORBIDDEN", "INSUFFICIENT_SCOPES"] and $not("statusCheckRollup" in path)]`,
+    code: "not-authorized",
+  },
   { status: "2xx", when: "response.body.errors and $not($exists(response.body.data) and $boolean(response.body.data))", code: "invalid" },
 ];
 
@@ -162,6 +169,29 @@ export const REPO_VARIABLES = `"owner": connections.workspace.owner, "repo": ${R
 
 /** Text as GitHub gave it, or null. */
 export const TEXT = `$text := function($value) { $type($value) = "string" ? $value : null }`;
+
+/** Whether GitHub refused to say what a pull request's checks are (see {@link GITHUB_ERRORS}). */
+export const ROLLUP_REFUSED = `$exists(response.body.errors["statusCheckRollup" in path])`;
+
+/**
+ * `$status(merged, state, draft)`: where a pull request stands, in the words
+ * of the status its links show: merged, closed, a draft, or open. GitHub's
+ * deliveries and its GraphQL say it alike, but for the state's case.
+ */
+export const STATUS = `$status := function($merged, $state, $draft) {
+  $merged = true ? "merged" : $lowercase($string($state)) = "closed" ? "closed" : $draft = true ? "draft" : "open"
+}`;
+
+/** Whether a webhook delivery is GitHub's `event`, with one of `actions` when it names any. */
+export function delivery(event: string, ...actions: string[]): Expression {
+  const action =
+    actions.length === 1 ? ` and payload.action = ${quote(actions[0])}` : actions.length ? ` and payload.action in ${JSON.stringify(actions)}` : "";
+  return `headers."x-github-event" = ${quote(event)}${action}`;
+}
+
+/** A branch's page at GitHub, from its repository's full name and its own. */
+export const branchUrl = (repository: Expression, name: Expression): Expression =>
+  `$encodeUrl(${quote(`${WEB}/`)} & ${repository} & "/tree/" & ${name})`;
 
 /** The fields every row of issues or pull requests is asked for. */
 export const ROW_FIELDS = "number title url state createdAt updatedAt closedAt";

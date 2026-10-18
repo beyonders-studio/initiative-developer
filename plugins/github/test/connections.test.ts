@@ -42,7 +42,9 @@ describe("after_connect for the organization", () => {
         headers: expect.objectContaining({ "X-GitHub-Api-Version": "2022-11-28" }),
       }))
     );
-    expect(run).toMatchObject({ result: { values: { owner: "acme", installation_id: 42 }, account_label: "acme" } });
+    expect(run).toMatchObject({
+      result: { values: { owner: "acme", installation_id: 42, owner_type: "Organization" }, account_label: "acme" },
+    });
   });
 
   it("finds it on a later page of the person's installations", async () => {
@@ -69,7 +71,7 @@ describe("after_connect for the organization", () => {
 
   it("records a personal account's installation for that person only", async () => {
     expect(await installed("43")).toMatchObject({
-      result: { values: { owner: "alice", installation_id: 43 }, account_label: "alice" },
+      result: { values: { owner: "alice", installation_id: 43, owner_type: "User" }, account_label: "alice" },
     });
     expect(await installed("44")).toMatchObject({ refused: "installation-not-held" });
   });

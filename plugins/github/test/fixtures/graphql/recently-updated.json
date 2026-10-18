@@ -1,0 +1,67 @@
+{
+  "data": {
+    "search": {
+      "issueCount": 4,
+      "nodes": [
+        {
+          "number": 9,
+          "title": "Fix the build",
+          "url": "https://github.com/acme/widgets/pull/9",
+          "state": "MERGED",
+          "isDraft": false,
+          "merged": true,
+          "repository": {
+            "nameWithOwner": "acme/widgets"
+          },
+          "reviewDecision": "APPROVED",
+          "statusCheckRollup": {
+            "state": "SUCCESS"
+          }
+        },
+        {
+          "number": 12,
+          "title": "Try the cache",
+          "url": "https://github.com/acme/Gadgets/pull/12",
+          "state": "OPEN",
+          "isDraft": true,
+          "merged": false,
+          "repository": {
+            "nameWithOwner": "acme/Gadgets"
+          },
+          "reviewDecision": null,
+          "statusCheckRollup": null
+        },
+        {
+          "number": 13,
+          "title": "Drop the unused index",
+          "url": "https://github.com/acme/widgets/pull/13",
+          "state": "OPEN",
+          "isDraft": false,
+          "merged": false,
+          "repository": {
+            "nameWithOwner": "acme/widgets"
+          },
+          "reviewDecision": "CHANGES_REQUESTED",
+          "statusCheckRollup": {
+            "state": "FAILURE"
+          }
+        },
+        {
+          "number": 14,
+          "title": "Bump the parser",
+          "url": "https://github.com/acme/widgets/pull/14",
+          "state": "CLOSED",
+          "isDraft": false,
+          "merged": false,
+          "repository": {
+            "nameWithOwner": "acme/widgets"
+          },
+          "reviewDecision": "REVIEW_REQUIRED",
+          "statusCheckRollup": {
+            "state": "PENDING"
+          }
+        }
+      ]
+    }
+  }
+}
