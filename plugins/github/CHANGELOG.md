@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [7.0.0]
 
 Tasks link to the GitHub branches and pull requests that name them, a member
 sees their own review requests and pull requests in any community, and a write
@@ -64,11 +64,11 @@ can be made as the organization.
   requests as a user's. An organization's carries on as it is.
 - In each community, a superadmin accepts this version from the plug-in's
   **Update** button, letting it read projects.
-- Needs an Initiative serving the plug-in API that keeps a declarative
-  plug-in's lists, settings, actions and schedules, resolves a request's
-  connection by the call's actor, and narrows the tokens it mints by the
-  account each installation is on; the manifest's `min_plugin_api` names it,
-  and an older Initiative refuses to install it.
+- Built on initiative-plugin-sdk 8.0. Needs an Initiative serving plug-in
+  API 8.0, which keeps a declarative plug-in's lists, settings, actions and
+  schedules, resolves a request's connection by the call's actor, and narrows
+  the tokens it mints by the account each installation is on; an older
+  Initiative refuses to install it.
 
 ## [6.0.0]
 

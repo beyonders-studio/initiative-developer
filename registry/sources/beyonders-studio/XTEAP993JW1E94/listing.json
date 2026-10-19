@@ -6,21 +6,23 @@
   "kind": "plugin",
   "name": "GitHub",
   "summary": "Your organization's issues, reviews and dependency alerts, on a dashboard and in your automations.",
-  "description": "Bring a GitHub organization into your community.\n\nAn admin connects the organization once, on GitHub's own install page, and picks the repositories the plug-in may see. Dashboards then show open issues, pull requests waiting on review, Dependabot alerts and a fortnight of throughput for everyone, with nobody pasting a token.\n\nMembers who connect their own GitHub account get their own review queue, and automations can open, comment on, close, label and move issues as them.",
+  "description": "Bring a GitHub organization into your community.\n\nAn admin connects the organization once, on GitHub's own install page, and picks the repositories the plug-in may see. Dashboards then show open issues, pull requests waiting on review, Dependabot alerts and a fortnight of throughput for everyone, with nobody pasting a token.\n\nAutomations can open, comment on, close, label and move issues, as the organization or as a member who connects their own GitHub account. Members who connect get their own review queue, and their own review requests and pull requests show in any community with the plug-in, whether or not it has connected an organization.\n\nTasks link to the branches and pull requests that name them, such as acme-42, and show whether each is open, reviewed and passing its checks. A task can start its own branch in GitHub, and a dashboard can list the open pull requests that name a task.",
   "avatar": {
     "path": "assets/avatar.png",
     "sha256": "1822301f8187e240ae4610afd9146be43e2ba8422437b7ddba5637264b97c744"
   },
   "versions": [
     {
-      "version": "6.0.0",
-      "definition": "6.0.0/manifest.json",
+      "version": "7.0.0",
+      "definition": "7.0.0/manifest.json",
       "min_app_version": "0.75.0",
-      "release_notes": "Built on initiative-plugin-sdk 6.0. Needs an Initiative serving plug-in API 6.0; an older one refuses to install it."
+      "release_notes": "Tasks link to the branches and pull requests that name them, writes can be made as the organization, and members see their own review requests and pull requests. Built on initiative-plugin-sdk 8.0. Needs an Initiative serving plug-in API 8.0; an older one refuses to install it."
     }
   ],
   "registration": {
     "kind": "declarative",
-    "scope_ceiling": []
+    "scope_ceiling": [
+      "projects:read"
+    ]
   }
 }

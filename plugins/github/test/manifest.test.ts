@@ -97,8 +97,8 @@ describe("manifest", () => {
     );
   });
 
-  it("needs plug-in API contract 6.0, the SDK it is built against", () => {
-    expect(manifest.min_plugin_api).toBe("6.0");
+  it("needs plug-in API contract 8.0, the SDK it is built against", () => {
+    expect(manifest.min_plugin_api).toBe("8.0");
   });
 
   it("keeps every endpoint 2.6.0 had, a pull request's adding its review and checks, and adds the review queue", () => {
@@ -359,7 +359,8 @@ describe("manifest", () => {
   it("is listed in the registry, with a registration by declaration", () => {
     const listing = read<Record<string, any>>(join(source, "listing.json"));
     expect(listing).toMatchObject({ uid: LISTING_UID, public_id: "beyonders-studio.github", publisher: "beyonders-studio" });
-    expect(listing.registration).toEqual({ kind: "declarative", scope_ceiling: [] });
+    // The ceiling allows the scopes the plug-in asks for: it keeps its links on tasks.
+    expect(listing.registration).toEqual({ kind: "declarative", scope_ceiling: manifest.scopes });
     // Between releases the plug-in runs ahead of what the listing publishes, never behind it.
     expect(packageVersion === listing.versions[0].version || later(packageVersion, listing.versions[0].version)).toBe(true);
   });
