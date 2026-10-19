@@ -122,7 +122,7 @@ export default definePlugin({
   name: "GitHub",
   // The oldest plug-in API contract this runs on: the SDK release it is built
   // against. A deployment serving another major, or an older minor, refuses it.
-  minPluginApi: "6.0",
+  minPluginApi: "8.0",
   hosts: ["api.github.com"],
   // The plug-in keeps its links on tasks, which Initiative allows on the
   // tasks the install can read.
@@ -595,16 +595,16 @@ export default definePlugin({
       "",
       "An admin connects the organization once, on GitHub's own install page, and picks the repositories the plug-in may see. Dashboards then show open issues, pull requests waiting on review, Dependabot alerts and a fortnight of throughput for everyone, with nobody pasting a token.",
       "",
-      "Members who connect their own GitHub account get their own review queue, and automations can open, comment on, close, label and move issues as them. Their own review requests and pull requests show in any community with the plug-in, whether or not it has connected an organization.",
+      "Automations can open, comment on, close, label and move issues, as the organization or as a member who connects their own GitHub account. Members who connect get their own review queue, and their own review requests and pull requests show in any community with the plug-in, whether or not it has connected an organization.",
       "",
       "Tasks link to the branches and pull requests that name them, such as acme-42, and show whether each is open, reviewed and passing its checks. A task can start its own branch in GitHub, and a dashboard can list the open pull requests that name a task.",
     ].join("\n"),
     avatar: "assets/avatar.png",
-    version: "6.0.0",
+    version: "7.0.0",
     // The oldest Initiative that runs a plug-in's calls to GitHub itself, and an
     // after_connect in steps; an older one refuses this manifest.
     minAppVersion: "0.75.0",
     releaseNotes:
-      "Built on initiative-plugin-sdk 6.0. Needs an Initiative serving plug-in API 6.0; an older one refuses to install it.",
+      "Tasks link to the branches and pull requests that name them, writes can be made as the organization, and members see their own review requests and pull requests. Built on initiative-plugin-sdk 8.0. Needs an Initiative serving plug-in API 8.0; an older one refuses to install it.",
   },
 });

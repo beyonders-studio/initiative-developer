@@ -1,6 +1,6 @@
 {
   "name": "initiative-github",
-  "version": "6.0.0",
+  "version": "7.0.0",
   "private": true,
   "description": "A GitHub organization's issues, reviews and dependency alerts in an Initiative community: endpoints an automation can call, widgets a dashboard can draw.",
   "license": "MIT",
@@ -23,6 +23,6 @@
     "vitest": "^5.0.1"
   },
   "dependencies": {
-    "initiative-plugin-sdk": "github:beyonders-studio/initiative-plugin-sdk#71f42c2"
+    "initiative-plugin-sdk": "8.0.0"
   }
 }
