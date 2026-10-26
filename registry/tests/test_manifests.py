@@ -18,10 +18,10 @@ DASHBOARD = "0ACME000000002"
 
 TOOL_KINDS = (
     "calendar",
+    "catalog",
     "counter_group",
     "dashboard",
     "file",
-    "gallery",
     "post",
     "project",
     "queue",
