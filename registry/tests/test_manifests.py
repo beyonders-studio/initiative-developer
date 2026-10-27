@@ -21,7 +21,6 @@ TOOL_KINDS = (
     "counter_group",
     "dashboard",
     "file",
-    "library",
     "post",
     "project",
     "queue",
