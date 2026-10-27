@@ -62,7 +62,7 @@ them:
   - `auto`, an automation;
   - `profile_pack`, a pack of profile decorations, art included;
   - a tool's content: `calendar`, `counter_group`, `dashboard`, `file`,
-    `library`, `post`, `project`, `queue` or `wiki`.
+    `post`, `project`, `queue` or `wiki`.
 - **Paths** (`avatar`, `images`, a definition or an example) are relative to the
   listing's directory and stay inside it. Images are PNG, JPEG, WebP, GIF, AVIF
   or SVG, and each one in `images` needs `alt` text.
