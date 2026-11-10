@@ -9,7 +9,7 @@
     "widgets"
   ],
   "default_name": "GitHub",
-  "min_plugin_api": "8.0",
+  "min_plugin_api": "10.1",
   "hosts": [
     "api.github.com"
   ],
@@ -6127,6 +6127,19 @@
       },
       "unique": true,
       "assigned": "community_name"
+    }
+  ],
+  "permissions": [
+    {
+      "id": "use",
+      "level": "initiative",
+      "name": {
+        "en": "Use GitHub",
+        "de": "GitHub nutzen",
+        "es": "Usar GitHub",
+        "fr": "Utiliser GitHub"
+      },
+      "members": true
     }
   ],
   "help": {

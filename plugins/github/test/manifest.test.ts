@@ -92,13 +92,20 @@ describe("manifest", () => {
         "parts",
         "actions",
         "settings",
+        "permissions",
         "help",
       ].sort()
     );
   });
 
-  it("needs plug-in API contract 8.0, the SDK it is built against", () => {
-    expect(manifest.min_plugin_api).toBe("8.0");
+  it("needs plug-in API contract 10.1, the SDK it is built against", () => {
+    expect(manifest.min_plugin_api).toBe("10.1");
+  });
+
+  it("lets every role in an initiative use it until the community says otherwise", () => {
+    expect(manifest.permissions).toEqual([
+      expect.objectContaining({ id: "use", level: "initiative", members: true }),
+    ]);
   });
 
   it("keeps every endpoint 2.6.0 had, a pull request's adding its review and checks, and adds the review queue", () => {
@@ -203,7 +210,7 @@ describe("manifest", () => {
         continue;
       }
       expect(endpoint.public).toBe(true);
-      expect(endpoint.admin_only).toBeUndefined();
+      expect(endpoint.permission).toBeUndefined();
       if (endpoint.direction === "read" && !members.includes(endpoint.id)) {
         expect(endpoint.actors).toEqual(["installation", "member"]);
         expect(endpoint.requires).toEqual({ all_of: ["workspace"] });
