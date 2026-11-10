@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Built on initiative-plugin-sdk 10.1.0, and needs plug-in API 10.1.
+- Every role in an initiative starts with GitHub's use there (its task actions, fields and widgets), and a community takes it off a role in that role's settings, as for a tool.
+
 ## [7.0.0]
 
 Tasks link to the GitHub branches and pull requests that name them, a member

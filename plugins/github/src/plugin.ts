@@ -122,11 +122,22 @@ export default definePlugin({
   name: "GitHub",
   // The oldest plug-in API contract this runs on: the SDK release it is built
   // against. A deployment serving another major, or an older minor, refuses it.
-  minPluginApi: "8.0",
+  minPluginApi: "10.1",
   hosts: ["api.github.com"],
   // The plug-in keeps its links on tasks, which Initiative allows on the
   // tasks the install can read.
   scopes: ["projects:read"],
+  // Every role in an initiative starts with the plug-in's use there: its task
+  // actions, fields and widgets. The community takes it off a role in that
+  // role's settings.
+  permissions: [
+    {
+      id: "use",
+      level: "initiative",
+      name: { en: "Use GitHub", de: "GitHub nutzen", es: "Usar GitHub", fr: "Utiliser GitHub" },
+      members: true,
+    },
+  ],
   settings: SETTINGS,
 
   // What the operator supplies once per deployment for the GitHub App: the
