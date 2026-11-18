@@ -122,7 +122,7 @@ export default definePlugin({
   name: "GitHub",
   // The oldest plug-in API contract this runs on: the SDK release it is built
   // against. A deployment serving another major, or an older minor, refuses it.
-  minPluginApi: "10.1",
+  minPluginApi: "11.0",
   hosts: ["api.github.com"],
   // The plug-in keeps its links on tasks, which Initiative allows on the
   // tasks the install can read.

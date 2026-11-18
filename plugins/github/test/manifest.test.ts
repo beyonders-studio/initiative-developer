@@ -98,8 +98,8 @@ describe("manifest", () => {
     );
   });
 
-  it("needs plug-in API contract 10.1, the SDK it is built against", () => {
-    expect(manifest.min_plugin_api).toBe("10.1");
+  it("needs plug-in API contract 11.0, the SDK it is built against", () => {
+    expect(manifest.min_plugin_api).toBe("11.0");
   });
 
   it("lets every role in an initiative use it until the community says otherwise", () => {
