@@ -9,14 +9,21 @@
   "description": "Bring a GitHub organization into your community.\n\nAn admin connects the organization once, on GitHub's own install page, and picks the repositories the plug-in may see. Dashboards then show open issues, pull requests waiting on review, Dependabot alerts and a fortnight of throughput for everyone, with nobody pasting a token.\n\nAutomations can open, comment on, close, label and move issues, as the organization or as a member who connects their own GitHub account. Members who connect get their own review queue, and their own review requests and pull requests show in any community with the plug-in, whether or not it has connected an organization.\n\nTasks link to the branches and pull requests that name them, such as acme-42, and show whether each is open, reviewed and passing its checks. A task can start its own branch in GitHub, and a dashboard can list the open pull requests that name a task.",
   "avatar": {
     "path": "assets/avatar.png",
-    "sha256": "1822301f8187e240ae4610afd9146be43e2ba8422437b7ddba5637264b97c744"
+    "sha256": "b5915992f9123e7e33c3010c3ac6aacc1f8d6689c1677f14f8bd888563f7048e"
   },
+  "images": [
+    {
+      "path": "assets/overview-dashboard.png",
+      "sha256": "34dc9e9e47d7a825e1f19d51540a6b3bf5f4d2cc0511421be1bd0452456782e3",
+      "alt": "The GitHub overview dashboard: open issues, pull requests waiting on review, Dependabot alerts by severity, and issues opened and closed by day."
+    }
+  ],
   "versions": [
     {
-      "version": "7.0.0",
-      "definition": "7.0.0/manifest.json",
+      "version": "8.0.0",
+      "definition": "8.0.0/manifest.json",
       "min_app_version": "0.75.0",
-      "release_notes": "Tasks link to the branches and pull requests that name them, writes can be made as the organization, and members see their own review requests and pull requests. Built on initiative-plugin-sdk 8.0. Needs an Initiative serving plug-in API 8.0; an older one refuses to install it."
+      "release_notes": "Every role in an initiative starts with GitHub's use there, and a community takes it off a role in that role's settings. Built on initiative-plugin-sdk 10.1. Needs an Initiative serving plug-in API 10.1; an older one refuses to install it."
     }
   ],
   "registration": {
