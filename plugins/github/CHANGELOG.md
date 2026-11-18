@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- GitHub checks the GitHub App's values when an operator saves them: the App ID and private key must sign for an app GitHub knows, and its name and client ID must be the ones given. Values from two different apps, or a mistyped name, are refused with the field to fix and GitHub's own value beside it, instead of an install page that 404s later.
+
 ### Changed
 
 - Built on initiative-plugin-sdk 11.0.0, and needs plug-in API 11.0 (Initiative 0.80.0).

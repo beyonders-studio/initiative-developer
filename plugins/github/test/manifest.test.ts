@@ -363,6 +363,23 @@ describe("manifest", () => {
     });
   });
 
+  it("has GitHub confirm the App ID, key, name and client ID belong to one app before they are saved", () => {
+    const check = manifest.vendor!.check!;
+    // Signed as the app itself, which only that app's key can do, and sent to
+    // GET /app, which answers for whichever app signed.
+    expect(check.sign).toEqual({ iss: "{vendor.app_id}", key: "{vendor.private_key}", alg: "RS256", lifetime: 60 });
+    expect(check.request).toMatchObject({ method: "GET", url: '"https://api.github.com" & "/app"' });
+    expect(check.request).not.toHaveProperty("connection");
+    // GitHub refusing the signed token blames the id and key; an app under
+    // another name or client ID blames that field, and shows GitHub's own.
+    expect(check.expect.map((row) => [row.status ?? "2xx", row.holds, row.fields, row.shows])).toEqual([
+      ["4xx", "false", ["app_id", "private_key"], undefined],
+      ["2xx", "response.body.slug = vendor.app_slug", ["app_slug"], "response.body.slug"],
+      ["2xx", "response.body.client_id = vendor.client_id", ["client_id"], "response.body.client_id"],
+    ]);
+    for (const row of check.expect) expect(Object.keys(row.message).sort()).toEqual(["de", "en", "es", "fr"]);
+  });
+
   it("is listed in the registry, with a registration by declaration", () => {
     const listing = read<Record<string, any>>(join(source, "listing.json"));
     expect(listing).toMatchObject({ uid: LISTING_UID, public_id: "beyonders-studio.github", publisher: "beyonders-studio" });

@@ -209,6 +209,48 @@ export default definePlugin({
         webhook_secret: "webhook_secret",
       },
     },
+    // Asked of GitHub whenever the values above are saved, before Initiative
+    // writes them: the App ID and private key must sign for an app GitHub
+    // knows, and that app's name and client ID must be the ones given here.
+    check: {
+      sign: { iss: "{vendor.app_id}", key: "{vendor.private_key}", alg: "RS256", lifetime: 60 },
+      request: rest("GET", quote("/app"), { connection: null }),
+      expect: [
+        {
+          status: "4xx",
+          holds: "false",
+          fields: ["app_id", "private_key"],
+          message: text(
+            "GitHub knows no app by this App ID and private key. Copy both from the same app's settings page.",
+            "GitHub kennt keine App mit dieser App-ID und diesem privaten Schlüssel. Kopiere beide von der Einstellungsseite derselben App.",
+            "GitHub no conoce ninguna app con este ID de app y esta clave privada. Copia ambos de la página de ajustes de la misma app.",
+            "GitHub ne connaît aucune app avec cet ID d'app et cette clé privée. Copiez les deux depuis la page de paramètres de la même app."
+          ),
+        },
+        {
+          holds: "response.body.slug = vendor.app_slug",
+          fields: ["app_slug"],
+          message: text(
+            "The App ID and private key belong to an app with another name. Use the name in that app's GitHub address.",
+            "App-ID und privater Schlüssel gehören zu einer App mit anderem Namen. Verwende den Namen aus der GitHub-Adresse dieser App.",
+            "El ID de app y la clave privada pertenecen a una app con otro nombre. Usa el nombre de la dirección de GitHub de esa app.",
+            "L'ID d'app et la clé privée appartiennent à une app d'un autre nom. Utilisez le nom de l'adresse GitHub de cette app."
+          ),
+          shows: "response.body.slug",
+        },
+        {
+          holds: "response.body.client_id = vendor.client_id",
+          fields: ["client_id"],
+          message: text(
+            "The client ID is from a different app. Copy the one on this app's settings page.",
+            "Die Client-ID stammt von einer anderen App. Kopiere die von der Einstellungsseite dieser App.",
+            "El ID de cliente es de otra app. Copia el de la página de ajustes de esta app.",
+            "L'ID client vient d'une autre app. Copiez celui de la page de paramètres de cette app."
+          ),
+          shows: "response.body.client_id",
+        },
+      ],
+    },
   },
 
   connections: {
