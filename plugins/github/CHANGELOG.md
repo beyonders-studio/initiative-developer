@@ -1,11 +1,19 @@
 # Changelog
 
-## [Unreleased]
+## [8.0.0]
+
+Who may use GitHub is a permission each role in an initiative holds, and the
+listing shows the GitHub mark and a picture of the overview dashboard.
+
+### Added
+
+- A picture of the overview dashboard on the listing.
 
 ### Changed
 
 - Built on initiative-plugin-sdk 10.1.0, and needs plug-in API 10.1.
 - Every role in an initiative starts with GitHub's use there (its task actions, fields and widgets), and a community takes it off a role in that role's settings, as for a tool.
+- The listing's picture is the GitHub mark.
 
 ## [7.0.0]
 

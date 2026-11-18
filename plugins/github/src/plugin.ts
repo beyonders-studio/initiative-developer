@@ -611,11 +611,17 @@ export default definePlugin({
       "Tasks link to the branches and pull requests that name them, such as acme-42, and show whether each is open, reviewed and passing its checks. A task can start its own branch in GitHub, and a dashboard can list the open pull requests that name a task.",
     ].join("\n"),
     avatar: "assets/avatar.png",
-    version: "7.0.0",
+    images: [
+      {
+        path: "assets/overview-dashboard.png",
+        alt: "The GitHub overview dashboard: open issues, pull requests waiting on review, Dependabot alerts by severity, and issues opened and closed by day.",
+      },
+    ],
+    version: "8.0.0",
     // The oldest Initiative that runs a plug-in's calls to GitHub itself, and an
     // after_connect in steps; an older one refuses this manifest.
     minAppVersion: "0.75.0",
     releaseNotes:
-      "Tasks link to the branches and pull requests that name them, writes can be made as the organization, and members see their own review requests and pull requests. Built on initiative-plugin-sdk 8.0. Needs an Initiative serving plug-in API 8.0; an older one refuses to install it.",
+      "Every role in an initiative starts with GitHub's use there, and a community takes it off a role in that role's settings. Built on initiative-plugin-sdk 10.1. Needs an Initiative serving plug-in API 10.1; an older one refuses to install it.",
   },
 });
