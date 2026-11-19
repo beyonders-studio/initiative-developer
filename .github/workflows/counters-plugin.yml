@@ -1,0 +1,40 @@
+name: Counters plug-in
+
+# The plug-in under plugins/counters. A pull request typechecks and tests it, and
+# checks that the committed manifest is current. It is a tool plug-in:
+# Initiative builds the tool from its manifest, so there is no image to build.
+
+on:
+  pull_request:
+    paths:
+      - "plugins/counters/**"
+      - "registry/sources/beyonders-studio/TSJVTCM0S7GV2X/**"
+      - ".github/workflows/counters-plugin.yml"
+  push:
+    branches: [main]
+    paths:
+      - "plugins/counters/**"
+      - ".github/workflows/counters-plugin.yml"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: plugins/counters
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: plugins/counters/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # manifest.json is what the plug-in's definition builds, and it validates.
+      - run: npm run manifest:check

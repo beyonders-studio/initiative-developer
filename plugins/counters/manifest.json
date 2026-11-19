@@ -1,0 +1,406 @@
+{
+  "plugin_kind": "tool",
+  "tool": {
+    "key": "counter_group",
+    "name": {
+      "en": "Counters",
+      "de": "Zähler",
+      "es": "Contadores",
+      "fr": "Compteurs"
+    },
+    "instance_name": {
+      "en": "Counter group",
+      "de": "Zählergruppe",
+      "es": "Grupo de contadores",
+      "fr": "Groupe de compteurs"
+    },
+    "icon": "gauge",
+    "fields": [
+      {
+        "key": "description",
+        "name": {
+          "en": "Description",
+          "de": "Beschreibung",
+          "es": "Descripción",
+          "fr": "Description"
+        },
+        "kind": "text"
+      }
+    ],
+    "layouts": {
+      "list": {
+        "kind": "grid",
+        "card": {
+          "type": "card",
+          "children": [
+            {
+              "type": "field",
+              "props": {
+                "field": "name"
+              }
+            },
+            {
+              "type": "stack",
+              "props": {
+                "tone": "muted"
+              },
+              "children": [
+                {
+                  "type": "field",
+                  "props": {
+                    "field": "description"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "field",
+              "props": {
+                "field": "tags"
+              }
+            }
+          ]
+        }
+      },
+      "detail": {
+        "header": [
+          {
+            "type": "stack",
+            "props": {
+              "direction": "row",
+              "gap": "sm",
+              "align": "start"
+            },
+            "children": [
+              {
+                "type": "field",
+                "props": {
+                  "field": "name"
+                }
+              },
+              {
+                "type": "actions"
+              }
+            ]
+          },
+          {
+            "type": "stack",
+            "props": {
+              "tone": "muted"
+            },
+            "children": [
+              {
+                "type": "field",
+                "props": {
+                  "field": "description"
+                }
+              }
+            ]
+          },
+          {
+            "type": "stack",
+            "props": {
+              "direction": "row",
+              "gap": "sm",
+              "wrap": true
+            },
+            "children": [
+              {
+                "type": "field",
+                "props": {
+                  "field": "tags"
+                }
+              },
+              {
+                "type": "properties"
+              }
+            ]
+          }
+        ],
+        "main": [
+          {
+            "type": "relations"
+          },
+          {
+            "type": "comments"
+          }
+        ]
+      }
+    },
+    "items": [
+      {
+        "key": "counter",
+        "name": {
+          "en": "Counter",
+          "de": "Zähler",
+          "es": "Contador",
+          "fr": "Compteur"
+        },
+        "fields": [
+          {
+            "key": "count",
+            "name": {
+              "en": "Count",
+              "de": "Stand",
+              "es": "Valor",
+              "fr": "Valeur"
+            },
+            "kind": "counter",
+            "counter": {
+              "min": "min",
+              "max": "max",
+              "step": "step",
+              "initial": "initial_count"
+            }
+          },
+          {
+            "key": "min",
+            "name": {
+              "en": "Min",
+              "de": "Min.",
+              "es": "Mínimo",
+              "fr": "Min"
+            },
+            "kind": "number"
+          },
+          {
+            "key": "max",
+            "name": {
+              "en": "Max",
+              "de": "Max.",
+              "es": "Máximo",
+              "fr": "Max"
+            },
+            "kind": "number"
+          },
+          {
+            "key": "step",
+            "name": {
+              "en": "Step",
+              "de": "Schrittweite",
+              "es": "Incremento",
+              "fr": "Pas"
+            },
+            "kind": "number",
+            "default": 1
+          },
+          {
+            "key": "initial_count",
+            "name": {
+              "en": "Initial value",
+              "de": "Anfangswert",
+              "es": "Valor inicial",
+              "fr": "Valeur initiale"
+            },
+            "kind": "number",
+            "default": 0
+          },
+          {
+            "key": "color",
+            "name": {
+              "en": "Color",
+              "de": "Farbe",
+              "es": "Color",
+              "fr": "Couleur"
+            },
+            "kind": "color"
+          },
+          {
+            "key": "view_mode",
+            "name": {
+              "en": "View mode",
+              "de": "Ansichtsmodus",
+              "es": "Modo de visualización",
+              "fr": "Mode d’affichage"
+            },
+            "kind": "select",
+            "default": "number",
+            "options": [
+              {
+                "value": "number",
+                "label": {
+                  "en": "Number",
+                  "de": "Zahl",
+                  "es": "Número",
+                  "fr": "Nombre"
+                }
+              },
+              {
+                "value": "progress_bar",
+                "label": {
+                  "en": "Progress bar",
+                  "de": "Fortschrittsbalken",
+                  "es": "Barra de progreso",
+                  "fr": "Barre de progression"
+                }
+              },
+              {
+                "value": "segmented_clock",
+                "label": {
+                  "en": "Segmented clock",
+                  "de": "Kreis (Uhr)",
+                  "es": "Reloj segmentado",
+                  "fr": "Horloge segmentée"
+                }
+              }
+            ]
+          }
+        ],
+        "layouts": {
+          "list": {
+            "kind": "grid",
+            "card": {
+              "type": "card",
+              "children": [
+                {
+                  "type": "field",
+                  "props": {
+                    "field": "name"
+                  }
+                },
+                {
+                  "type": "field",
+                  "props": {
+                    "field": "count"
+                  }
+                }
+              ]
+            },
+            "displays": {
+              "count": "number"
+            }
+          },
+          "detail": {
+            "header": [
+              {
+                "type": "stack",
+                "props": {
+                  "direction": "row",
+                  "gap": "sm",
+                  "align": "start"
+                },
+                "children": [
+                  {
+                    "type": "field",
+                    "props": {
+                      "field": "name"
+                    }
+                  },
+                  {
+                    "type": "actions"
+                  }
+                ]
+              }
+            ],
+            "main": [
+              {
+                "type": "field",
+                "props": {
+                  "field": "count"
+                }
+              },
+              {
+                "type": "relations"
+              }
+            ],
+            "side": [
+              {
+                "type": "section",
+                "children": [
+                  {
+                    "type": "field",
+                    "props": {
+                      "field": "color"
+                    }
+                  },
+                  {
+                    "type": "field",
+                    "props": {
+                      "field": "min"
+                    }
+                  },
+                  {
+                    "type": "field",
+                    "props": {
+                      "field": "max"
+                    }
+                  },
+                  {
+                    "type": "field",
+                    "props": {
+                      "field": "step",
+                      "required": true
+                    }
+                  },
+                  {
+                    "type": "field",
+                    "props": {
+                      "field": "initial_count",
+                      "required": true
+                    }
+                  },
+                  {
+                    "type": "field",
+                    "props": {
+                      "field": "view_mode",
+                      "required": true
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "section",
+                "children": [
+                  {
+                    "type": "properties"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "open_while": {
+          "field": "count",
+          "below": {
+            "field": "max"
+          }
+        }
+      }
+    ],
+    "actions": [
+      {
+        "id": "reset",
+        "name": {
+          "en": "Reset",
+          "de": "Zurücksetzen",
+          "es": "Restablecer",
+          "fr": "Réinitialiser"
+        },
+        "on": "counter",
+        "write": "{\"set\": {\"count\": item.($start := initial_count; (min != null and $start < min) ? min : (max != null and $start > max) ? max : $start)}}"
+      },
+      {
+        "id": "reset_all",
+        "name": {
+          "en": "Reset All",
+          "de": "Alle zurücksetzen",
+          "es": "Restablecer todo",
+          "fr": "Tout réinitialiser"
+        },
+        "on": "counter_group",
+        "confirm": {
+          "en": "Reset every counter in this group to its initial value?",
+          "de": "Jeden Zähler in dieser Gruppe auf seinen Anfangswert zurücksetzen?",
+          "es": "¿Restablecer cada contador de este grupo a su valor inicial?",
+          "fr": "Réinitialiser chaque compteur de ce groupe à sa valeur initiale ?"
+        },
+        "write": "{\"items\": {\"counter\": [items.counter.{\"id\": id, \"set\": {\"count\": ($start := initial_count; (min != null and $start < min) ? min : (max != null and $start > max) ? max : $start)}}]}}"
+      }
+    ]
+  },
+  "features": [
+    "tool"
+  ],
+  "default_name": "Counters",
+  "min_plugin_api": "11.1"
+}
