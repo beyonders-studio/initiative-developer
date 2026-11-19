@@ -105,6 +105,7 @@
           "statuses": "read",
           "vulnerability_alerts": "read",
           "organization_projects": "write",
+          "members": "read",
           "metadata": "read"
         },
         "default_events": [
@@ -384,6 +385,7 @@
           "statuses:read",
           "vulnerability_alerts:read",
           "organization_projects:write",
+          "members:read",
           "metadata:read"
         ]
       }

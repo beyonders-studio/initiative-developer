@@ -105,7 +105,7 @@ address:
 | Webhook URL | `{APP_URL}/api/v1/plugin-hooks/beyonders-studio.github` |
 | Webhook secret | a long random value |
 | Repository permissions | Issues: read and write · Pull requests: read and write · Contents: read and write · Checks: read · Commit statuses: read · Dependabot alerts: read · Metadata: read |
-| Organization permissions | Projects: read and write |
+| Organization permissions | Members: read · Projects: read and write |
 | Events | Issues · Pull request · Release · Create · Delete · Pull request review · Check suite |
 
 Then generate a private key and a client secret on the GitHub App's page, and enter
