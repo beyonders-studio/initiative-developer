@@ -274,7 +274,7 @@
       "unevaluatedProperties": false
     },
     "registration": {
-      "description": "For a plug-in (and allowed for an automation): what kind it is and the most it may ever be granted. A container names the image each deployment runs, and each deployment gives its location and the keys its copy signs with. A declarative plug-in names no image: Initiative runs it from its manifest. A container may also carry a runtime, which lets a deployment run it on its own.",
+      "description": "For a plug-in (and allowed for an automation): what kind it is and the most it may ever be granted. A container names the image each deployment runs, and each deployment gives its location and the keys its copy signs with. A declarative plug-in names no image: Initiative runs it from its manifest. A tool plug-in names no image and asks for no scopes: it only declares a tool, which Initiative builds. A container may also carry a runtime, which lets a deployment run it on its own.",
       "type": "object",
       "required": [
         "kind",
@@ -284,7 +284,8 @@
         "kind": {
           "enum": [
             "container",
-            "declarative"
+            "declarative",
+            "tool"
           ]
         },
         "image": {

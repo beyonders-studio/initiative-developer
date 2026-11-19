@@ -568,6 +568,51 @@ def test_a_registration_fits_its_kind(
         world.build()
 
 
+TOOL = {"kind": "tool", "scope_ceiling": []}
+
+
+def _as_tool(world: World) -> None:
+    kit = world.sources / "acme" / PLUGIN / "1.0.0" / "manifest.json"
+    document = json.loads(kit.read_text())
+    del document["service"]
+    document["plugin_kind"] = "tool"
+    kit.write_text(json.dumps(document))
+
+
+def test_a_tool_plugin_registers_no_image(world: World) -> None:
+    """It only declares a tool, which Initiative builds from its kit manifest."""
+    _as_tool(world)
+    world.edit_listing(PLUGIN, lambda d: d.update(registration=TOOL))
+    result = world.build()
+    verify(result.out, world.trusted_root, target="public")
+    plugin = next(listing for listing in result.listings if listing.uid == PLUGIN)
+    signed = plugin.targets[f"publishers/acme/{PLUGIN}/listing.json"]
+    assert json.loads(signed.data)["registration"] == TOOL
+
+
+@pytest.mark.parametrize(
+    ("registration", "match"),
+    [
+        ({**TOOL, "image": f"ghcr.io/acme/t@sha256:{'0' * 64}"}, "schema"),
+        ({**TOOL, "scope_ceiling": ["projects:read"]}, "asks for no scopes"),
+    ],
+    ids=["tool-image", "tool-scopes"],
+)
+def test_a_tool_registration_fits_its_kind(
+    world: World, registration: dict, match: str
+) -> None:
+    _as_tool(world)
+    world.edit_listing(PLUGIN, lambda d: d.update(registration=registration))
+    with pytest.raises(RegistryError, match=match):
+        world.build()
+
+
+def test_a_tool_registration_needs_a_tool_manifest(world: World) -> None:
+    world.edit_listing(PLUGIN, lambda d: d.update(registration=TOOL))
+    with pytest.raises(RegistryError, match="tool kind"):
+        world.build()
+
+
 def test_content_with_registration_is_refused(world: World) -> None:
     registration = json.loads(world.listing(PLUGIN).read_text())["registration"]
     world.edit_listing(DASHBOARD, lambda d: d.update(registration=registration))

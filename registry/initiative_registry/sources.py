@@ -195,12 +195,15 @@ def definition_matches(
     """Whether a kit manifest is the plug-in a registration says.
 
     A container's names ``public_id`` as its service; a declarative plug-in's
-    has no service block.
+    has no service block; a tool plug-in's is of the ``tool`` kind and has none.
     """
-    if registration.get("kind") == "declarative":
+    kind = registration.get("kind")
+    if kind == "declarative":
         return (
             definition.get("plugin_kind") == "service" and "service" not in definition
         )
+    if kind == "tool":
+        return definition.get("plugin_kind") == "tool" and "service" not in definition
     return service_public_id(definition) == public_id
 
 
@@ -231,6 +234,14 @@ def _publish_version(
     if "example" in version:
         example = _document(listing, version["example"], what=f"{what} example")
     registration = listing.entry.get("registration")
+    if (
+        registration
+        and registration["kind"] == "tool"
+        and registration["scope_ceiling"]
+    ):
+        raise RegistryError(
+            f"{what}: a tool plug-in asks for no scopes, so its scope_ceiling is empty"
+        )
     if registration and not definition_matches(
         registration, listing.public_id, definition
     ):
@@ -238,6 +249,11 @@ def _publish_version(
             raise RegistryError(
                 f"{what} definition: a declarative plug-in's kit manifest has no "
                 "service block"
+            )
+        if registration["kind"] == "tool":
+            raise RegistryError(
+                f"{what} definition: a tool plug-in's kit manifest is of the "
+                "tool kind and has no service block"
             )
         raise RegistryError(
             f"{what} definition: a listing with a registration is a service "
