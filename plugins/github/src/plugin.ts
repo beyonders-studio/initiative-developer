@@ -46,6 +46,9 @@ const PERMISSIONS: Readonly<Record<string, GithubPermissionLevel>> = {
   vulnerability_alerts: "read",
   // The organization's project boards, read and moved on.
   organization_projects: "write",
+  // Who is an admin of the organization: connecting an installation checks
+  // that the person connecting it is one.
+  members: "read",
   metadata: "read",
 };
 

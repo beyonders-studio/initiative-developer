@@ -10,6 +10,18 @@
 
 - Built on initiative-plugin-sdk 11.0.0, and needs plug-in API 11.0 (Initiative 0.80.0).
 
+### Fixed
+
+- An organization's owner can connect it again. The GitHub App asks for
+  Members read, which GitHub requires before it shows who administers the
+  organization; without it every organization was refused as not theirs.
+
+### Upgrading
+
+- In the GitHub App's settings, give it Members: *Read-only* under
+  Organization permissions. Each organization owner then accepts the new
+  permission in GitHub.
+
 ## [8.0.0]
 
 Who may use GitHub is a permission each role in an initiative holds, and the

@@ -348,6 +348,7 @@ describe("manifest", () => {
           statuses: "read",
           vulnerability_alerts: "read",
           organization_projects: "write",
+          members: "read",
           metadata: "read",
         },
         default_events: ["issues", "pull_request", "release", "create", "delete", "pull_request_review", "check_suite"],
