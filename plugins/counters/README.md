@@ -17,11 +17,12 @@ create a group come with every tool and are not declared here.
 | | |
 |---|---|
 | **The tool** | `counter_group`, a *Counter group*, with a description. Shown in the sidebar as *Counters*, with the gauge icon. |
-| **Its item** | `counter`, a *Counter* in a group, with seven fields: the count, its min and max, its step (1 to start), its initial value (0 to start), its color and its view mode (number, progress bar or segmented clock). |
+| **Its item** | `counter`, a *Counter* in a group, with seven fields: the count, its min and max, its step (1 to start), its initial value (0 to start), its color (one from Initiative's palette to start) and its view mode (number, progress bar or segmented clock; number to start). The step, initial value and view mode are never empty. |
+| **Checks** | A counter's min is at most its max, and its step is above 0. |
 | **The count** | A counter field, stepped by the counter's own step, never past its own min or max, and reset to its own initial value. |
 | **Blocking** | A counter linked to a task holds the task up until its count reaches its max. One with no max holds nothing up. |
 | **Two actions** | *Reset* on a counter, and *Reset All* on a group, which asks first. Each puts the count back to the initial value, held within the min and max. |
-| **Layouts** | A grid of groups, each its name, description and tags. A group's page with its name, menu, description, tags and properties across the top, then its counters, links and comments. A grid of counters, each its name and count. A counter's page with its name and menu across the top, its count and links in the middle, and how it counts and its properties beside them. |
+| **Layouts** | Groups as a grid, each card previewing its first four counters in their colours above its name, description and tags, or as a table. A group's page with its name, menu, description, tags and properties across the top, then its counters, links and comments. Counters as a grid of cards in their colours, each its name and its count drawn in its own view mode, or as a table; both sort by name or count, either way. A counter's page with its name and menu across the top, its count and links in the middle, and how it counts and its properties beside them. |
 
 Every name is in English, German, Spanish and French, in the words Initiative
 uses for its built-in Counters.

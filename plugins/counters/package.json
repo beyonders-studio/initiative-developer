@@ -23,6 +23,6 @@
     "vitest": "^5.0.1"
   },
   "dependencies": {
-    "initiative-plugin-sdk": "github:beyonders-studio/initiative-plugin-sdk#2971616a1f2c199fc36546d39fcab27149fb0418"
+    "initiative-plugin-sdk": "github:beyonders-studio/initiative-plugin-sdk#357f21a11107d6afe498478a29a521f30cba274a"
   }
 }

@@ -28,40 +28,63 @@
       }
     ],
     "layouts": {
-      "list": {
-        "kind": "grid",
-        "card": {
-          "type": "card",
-          "children": [
-            {
-              "type": "field",
-              "props": {
-                "field": "name"
-              }
-            },
-            {
-              "type": "stack",
-              "props": {
-                "tone": "muted"
-              },
-              "children": [
-                {
-                  "type": "field",
-                  "props": {
-                    "field": "description"
-                  }
+      "lists": [
+        {
+          "kind": "grid",
+          "card": {
+            "type": "card",
+            "children": [
+              {
+                "type": "items",
+                "props": {
+                  "item": "counter",
+                  "fields": [
+                    "name",
+                    "count"
+                  ],
+                  "limit": 4,
+                  "tint": "color"
                 }
-              ]
-            },
-            {
-              "type": "field",
-              "props": {
-                "field": "tags"
+              },
+              {
+                "type": "field",
+                "props": {
+                  "field": "name"
+                }
+              },
+              {
+                "type": "stack",
+                "props": {
+                  "tone": "muted"
+                },
+                "children": [
+                  {
+                    "type": "field",
+                    "props": {
+                      "field": "description"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "field",
+                "props": {
+                  "field": "tags"
+                }
               }
-            }
+            ]
+          }
+        },
+        {
+          "kind": "table",
+          "columns": [
+            "name",
+            "description",
+            "tags",
+            "updated_at"
           ]
         }
-      },
+      ],
       "detail": {
         "header": [
           {
@@ -182,7 +205,8 @@
               "fr": "Pas"
             },
             "kind": "number",
-            "default": 1
+            "default": 1,
+            "required": true
           },
           {
             "key": "initial_count",
@@ -193,7 +217,8 @@
               "fr": "Valeur initiale"
             },
             "kind": "number",
-            "default": 0
+            "default": 0,
+            "required": true
           },
           {
             "key": "color",
@@ -203,7 +228,8 @@
               "es": "Color",
               "fr": "Couleur"
             },
-            "kind": "color"
+            "kind": "color",
+            "default": "random"
           },
           {
             "key": "view_mode",
@@ -215,6 +241,7 @@
             },
             "kind": "select",
             "default": "number",
+            "required": true,
             "options": [
               {
                 "value": "number",
@@ -226,7 +253,7 @@
                 }
               },
               {
-                "value": "progress_bar",
+                "value": "bar",
                 "label": {
                   "en": "Progress bar",
                   "de": "Fortschrittsbalken",
@@ -235,7 +262,7 @@
                 }
               },
               {
-                "value": "segmented_clock",
+                "value": "clock",
                 "label": {
                   "en": "Segmented clock",
                   "de": "Kreis (Uhr)",
@@ -246,30 +273,196 @@
             ]
           }
         ],
+        "checks": [
+          {
+            "field": "min",
+            "at_most": {
+              "field": "max"
+            }
+          },
+          {
+            "field": "step",
+            "above": 0
+          }
+        ],
         "layouts": {
-          "list": {
-            "kind": "grid",
-            "card": {
-              "type": "card",
-              "children": [
-                {
-                  "type": "field",
-                  "props": {
-                    "field": "name"
+          "lists": [
+            {
+              "kind": "grid",
+              "card": {
+                "type": "card",
+                "props": {
+                  "tint": "color"
+                },
+                "children": [
+                  {
+                    "type": "field",
+                    "props": {
+                      "field": "name"
+                    }
+                  },
+                  {
+                    "type": "field",
+                    "props": {
+                      "field": "count"
+                    }
                   }
+                ]
+              },
+              "displays": {
+                "count": {
+                  "from": "view_mode"
+                }
+              },
+              "presets": [
+                {
+                  "slug": "name-asc",
+                  "name": {
+                    "en": "Name (A→Z)",
+                    "de": "Name (A→Z)",
+                    "es": "Nombre (A→Z)",
+                    "fr": "Nom (A→Z)"
+                  },
+                  "sort": [
+                    {
+                      "field": "name"
+                    }
+                  ]
                 },
                 {
-                  "type": "field",
-                  "props": {
-                    "field": "count"
-                  }
+                  "slug": "name-desc",
+                  "name": {
+                    "en": "Name (Z→A)",
+                    "de": "Name (Z→A)",
+                    "es": "Nombre (Z→A)",
+                    "fr": "Nom (Z→A)"
+                  },
+                  "sort": [
+                    {
+                      "field": "name",
+                      "dir": "desc"
+                    }
+                  ]
+                },
+                {
+                  "slug": "count-asc",
+                  "name": {
+                    "en": "Count (low→high)",
+                    "de": "Stand (niedrig→hoch)",
+                    "es": "Valor (menor→mayor)",
+                    "fr": "Valeur (croissant)"
+                  },
+                  "sort": [
+                    {
+                      "field": "count"
+                    },
+                    {
+                      "field": "name"
+                    }
+                  ]
+                },
+                {
+                  "slug": "count-desc",
+                  "name": {
+                    "en": "Count (high→low)",
+                    "de": "Stand (hoch→niedrig)",
+                    "es": "Valor (mayor→menor)",
+                    "fr": "Valeur (décroissant)"
+                  },
+                  "sort": [
+                    {
+                      "field": "count",
+                      "dir": "desc"
+                    },
+                    {
+                      "field": "name"
+                    }
+                  ]
                 }
               ]
             },
-            "displays": {
-              "count": "number"
+            {
+              "kind": "table",
+              "columns": [
+                "name",
+                "count",
+                "min",
+                "max",
+                "step"
+              ],
+              "displays": {
+                "count": {
+                  "from": "view_mode"
+                }
+              },
+              "presets": [
+                {
+                  "slug": "name-asc",
+                  "name": {
+                    "en": "Name (A→Z)",
+                    "de": "Name (A→Z)",
+                    "es": "Nombre (A→Z)",
+                    "fr": "Nom (A→Z)"
+                  },
+                  "sort": [
+                    {
+                      "field": "name"
+                    }
+                  ]
+                },
+                {
+                  "slug": "name-desc",
+                  "name": {
+                    "en": "Name (Z→A)",
+                    "de": "Name (Z→A)",
+                    "es": "Nombre (Z→A)",
+                    "fr": "Nom (Z→A)"
+                  },
+                  "sort": [
+                    {
+                      "field": "name",
+                      "dir": "desc"
+                    }
+                  ]
+                },
+                {
+                  "slug": "count-asc",
+                  "name": {
+                    "en": "Count (low→high)",
+                    "de": "Stand (niedrig→hoch)",
+                    "es": "Valor (menor→mayor)",
+                    "fr": "Valeur (croissant)"
+                  },
+                  "sort": [
+                    {
+                      "field": "count"
+                    },
+                    {
+                      "field": "name"
+                    }
+                  ]
+                },
+                {
+                  "slug": "count-desc",
+                  "name": {
+                    "en": "Count (high→low)",
+                    "de": "Stand (hoch→niedrig)",
+                    "es": "Valor (mayor→menor)",
+                    "fr": "Valeur (décroissant)"
+                  },
+                  "sort": [
+                    {
+                      "field": "count",
+                      "dir": "desc"
+                    },
+                    {
+                      "field": "name"
+                    }
+                  ]
+                }
+              ]
             }
-          },
+          ],
           "detail": {
             "header": [
               {
