@@ -1,0 +1,28 @@
+{
+  "name": "initiative-counters",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Counters as a tool plug-in: groups of named numbers a community steps, bounds and resets, declared for Initiative to build.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/run-tests.mjs",
+    "test:watch": "vitest",
+    "manifest": "initiative-plugin build",
+    "manifest:check": "initiative-plugin build --check",
+    "listing": "initiative-plugin build --registry ../../registry/sources"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "initiative-plugin-sdk": "github:beyonders-studio/initiative-plugin-sdk#357f21a11107d6afe498478a29a521f30cba274a"
+  }
+}
