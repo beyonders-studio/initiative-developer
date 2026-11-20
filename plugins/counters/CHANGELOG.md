@@ -10,5 +10,5 @@
   counter blocking what it is linked to until it reaches its max, and the
   built-in tool's pages as layouts: grids and tables, cards in the counters'
   colours, each count in its own view mode, and sorts by name and count. Named in
-  English, German, Spanish and French. Built on initiative-plugin-sdk main,
+  English, German, Spanish and French. Built on initiative-plugin-sdk 11.1.0,
   and needs plug-in API 11.1 (Initiative 0.80.0).

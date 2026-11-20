@@ -8,7 +8,7 @@
 
 ### Changed
 
-- Built on initiative-plugin-sdk 11.0.0, and needs plug-in API 11.0 (Initiative 0.80.0).
+- Built on initiative-plugin-sdk 11.1.0, and needs plug-in API 11.0 (Initiative 0.80.0).
 
 ### Fixed
 
