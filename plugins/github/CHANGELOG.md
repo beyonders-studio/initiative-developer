@@ -8,6 +8,7 @@
 
 ### Changed
 
+- The marketplace listing pictures a member's own widgets (review requests, pull requests, and the pull requests that name a task) and a task's GitHub section with its linked pull requests and branch, beside the overview dashboard.
 - Built on initiative-plugin-sdk 11.1.0, and needs plug-in API 11.0 (Initiative 0.80.0).
 
 ### Fixed

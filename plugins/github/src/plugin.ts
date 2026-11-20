@@ -661,6 +661,14 @@ export default definePlugin({
         path: "assets/overview-dashboard.png",
         alt: "The GitHub overview dashboard: open issues, pull requests waiting on review, Dependabot alerts by severity, and issues opened and closed by day.",
       },
+      {
+        path: "assets/your-pull-requests.png",
+        alt: "A member's own GitHub widgets on a dashboard: the pull requests that asked for their review, their own open pull requests, and the pull requests that name a task.",
+      },
+      {
+        path: "assets/task-links.png",
+        alt: "A task with its GitHub section: two linked pull requests, one open and one merged, each approved and passing its checks, and the task's branch.",
+      },
     ],
     version: "8.0.0",
     // The oldest Initiative that runs a plug-in's calls to GitHub itself, and an
