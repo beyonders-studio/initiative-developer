@@ -12,3 +12,5 @@
   colours, each count in its own view mode, and sorts by name and count. Named in
   English, German, Spanish and French. Built on initiative-plugin-sdk 11.1.0,
   and needs plug-in API 11.1 (Initiative 0.80.0).
+- Its registry listing, with three pictures: a tab of counter groups, a
+  group's counters in each look, and a counter full screen.
