@@ -23,6 +23,6 @@
     "vitest": "^5.0.1"
   },
   "dependencies": {
-    "initiative-plugin-sdk": "11.0.0"
+    "initiative-plugin-sdk": "11.1.0"
   }
 }
