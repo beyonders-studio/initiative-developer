@@ -216,6 +216,20 @@ export default definePlugin({
       "A counter linked to a task holds the task up until it reaches its max. Counter groups are shared, tagged, linked, commented on, archived and exported like every other tool.",
     ].join("\n"),
     avatar: "assets/avatar.png",
+    images: [
+      {
+        path: "assets/counters-groups.png",
+        alt: "An initiative's Counters tab with two counter groups as cards, each previewing its counters in their colors: hit points as progress bars, tallies as numbers and a long rest as a segmented clock.",
+      },
+      {
+        path: "assets/counters-group.png",
+        alt: "A counter group's counters as a grid of colored cards, each with its name, its count and minus and plus buttons, drawn as a progress bar, a number or a segmented clock.",
+      },
+      {
+        path: "assets/counters-full-screen.png",
+        alt: "A counter full screen: its count, 38, large in the middle, with wide minus and plus buttons along the bottom.",
+      },
+    ],
     version: "1.0.0",
     // The first Initiative that builds a tool from a tool plug-in.
     minAppVersion: "0.80.0",

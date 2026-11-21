@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "uid": "TSJVTCM0S7GV2X",
+  "public_id": "beyonders-studio.counters",
+  "publisher": "beyonders-studio",
+  "kind": "plugin",
+  "name": "Counters",
+  "summary": "Numbers that move: tallies, totals, scores, seats left, hit points.",
+  "description": "Groups of named numbers that people in an initiative step up and down.\n\nEach counter keeps its own step, its own floor and ceiling, its color, and the value a reset puts it back to. Counters show as a number, a progress bar or a segmented clock. Reset one counter, or the whole group at once.\n\nA counter linked to a task holds the task up until it reaches its max. Counter groups are shared, tagged, linked, commented on, archived and exported like every other tool.",
+  "avatar": {
+    "path": "assets/avatar.png",
+    "sha256": "f6499cf59152558275e729c8e5cfdaf024b03cc562ab533ec8797032fedc82eb"
+  },
+  "images": [
+    {
+      "path": "assets/counters-groups.png",
+      "sha256": "2589f5a31fa0b7609495a67dbb38a54134dc98d4654aef1e90ce69e781ff543c",
+      "alt": "An initiative's Counters tab with two counter groups as cards, each previewing its counters in their colors: hit points as progress bars, tallies as numbers and a long rest as a segmented clock."
+    },
+    {
+      "path": "assets/counters-group.png",
+      "sha256": "7d2818058e3996a8a8da65919263ddd457db8e9608ce24bc1c27abf0a0737896",
+      "alt": "A counter group's counters as a grid of colored cards, each with its name, its count and minus and plus buttons, drawn as a progress bar, a number or a segmented clock."
+    },
+    {
+      "path": "assets/counters-full-screen.png",
+      "sha256": "4ff4404028c9bac4ea77a79ca88ed377296bf720b32d166cf90074bf3e349de2",
+      "alt": "A counter full screen: its count, 38, large in the middle, with wide minus and plus buttons along the bottom."
+    }
+  ],
+  "versions": [
+    {
+      "version": "1.0.0",
+      "definition": "1.0.0/manifest.json",
+      "min_app_version": "0.80.0",
+      "release_notes": "Counters as a tool plug-in, with the fields, looks and resets of the built-in tool. Needs an Initiative serving plug-in API 11.1."
+    }
+  ],
+  "registration": {
+    "kind": "tool",
+    "scope_ceiling": []
+  }
+}
