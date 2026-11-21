@@ -30,12 +30,6 @@
   ],
   "versions": [
     {
-      "version": "1.0.0",
-      "definition": "1.0.0/manifest.json",
-      "min_app_version": "0.80.0",
-      "release_notes": "Counters as a tool plug-in, with the fields, looks and resets of the built-in tool. Needs an Initiative serving plug-in API 11.1."
-    },
-    {
       "version": "1.1.0",
       "definition": "1.1.0/manifest.json",
       "min_app_version": "0.80.0",
