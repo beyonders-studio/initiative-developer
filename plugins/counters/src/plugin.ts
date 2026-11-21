@@ -202,9 +202,46 @@ export default definePlugin({
   // it converts today's counters into are the ones it has documented.
   uid: "TSJVTCM0S7GV2X",
   name: "Counters",
-  // The tool block is plug-in API 11.1's.
-  minPluginApi: "11.1",
+  // The tool block is plug-in API 11.1's, and a tool plug-in's dashboards 11.2's.
+  minPluginApi: "11.2",
   tool,
+  // Its Counter board: one counter as the headline, its progress toward the
+  // goal, and the rest of its group charted. Each tile is a query over the
+  // plug-in's own counters, run as whoever views the dashboard. It was
+  // Initiative's bundled core.counter-board, under a uid of its own.
+  dashboards: [
+    {
+      uid: "8V57MMR212TEY5",
+      public_id: "beyonders-studio.counter-board",
+      name: "Counter board",
+      description: "Your counters, front and center.",
+      layout: { columns: 12 },
+      widgets: [
+        {
+          id: "w1",
+          type: "stat",
+          title: "The headline number",
+          grid: { x: 0, y: 0, w: 4, h: 3 },
+          binding: { source: "query", sql: "SELECT name, count FROM p_tsjvtcm0s7gv2x_counter ORDER BY name" },
+        },
+        {
+          id: "w2",
+          type: "progress",
+          title: "Toward the goal",
+          grid: { x: 4, y: 0, w: 8, h: 3 },
+          binding: { source: "query", sql: "SELECT name, count, max FROM p_tsjvtcm0s7gv2x_counter ORDER BY name" },
+        },
+        {
+          id: "w3",
+          type: "chart",
+          title: "The whole group",
+          grid: { x: 0, y: 3, w: 12, h: 4 },
+          options: { mark: "bar" },
+          binding: { source: "query", sql: "SELECT name, count FROM p_tsjvtcm0s7gv2x_counter ORDER BY count DESC" },
+        },
+      ],
+    },
+  ],
   listing: {
     publisher: "beyonders-studio",
     summary: "Numbers that move: tallies, totals, scores, seats left, hit points.",
@@ -230,9 +267,10 @@ export default definePlugin({
         alt: "A counter full screen: its count, 38, large in the middle, with wide minus and plus buttons along the bottom.",
       },
     ],
-    version: "1.0.0",
-    // The first Initiative that builds a tool from a tool plug-in.
+    version: "1.1.0",
+    // The first Initiative that builds a tool from a tool plug-in, and a
+    // tool plug-in's dashboards.
     minAppVersion: "0.80.0",
-    releaseNotes: "Counters as a tool plug-in, with the fields, looks and resets of the built-in tool. Needs an Initiative serving plug-in API 11.1.",
+    releaseNotes: "Brings the Counter board: one counter as the headline, its progress toward the goal, and the rest of its group charted alongside. Needs an Initiative serving plug-in API 11.2.",
   },
 });

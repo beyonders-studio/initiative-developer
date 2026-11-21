@@ -592,8 +592,70 @@
     ]
   },
   "features": [
+    "dashboards",
     "tool"
   ],
   "default_name": "Counters",
-  "min_plugin_api": "11.1"
+  "min_plugin_api": "11.2",
+  "dashboards": [
+    {
+      "uid": "8V57MMR212TEY5",
+      "public_id": "beyonders-studio.counter-board",
+      "name": "Counter board",
+      "description": "Your counters, front and center.",
+      "layout": {
+        "columns": 12
+      },
+      "widgets": [
+        {
+          "id": "w1",
+          "type": "stat",
+          "title": "The headline number",
+          "grid": {
+            "x": 0,
+            "y": 0,
+            "w": 4,
+            "h": 3
+          },
+          "binding": {
+            "source": "query",
+            "sql": "SELECT name, count FROM p_tsjvtcm0s7gv2x_counter ORDER BY name"
+          }
+        },
+        {
+          "id": "w2",
+          "type": "progress",
+          "title": "Toward the goal",
+          "grid": {
+            "x": 4,
+            "y": 0,
+            "w": 8,
+            "h": 3
+          },
+          "binding": {
+            "source": "query",
+            "sql": "SELECT name, count, max FROM p_tsjvtcm0s7gv2x_counter ORDER BY name"
+          }
+        },
+        {
+          "id": "w3",
+          "type": "chart",
+          "title": "The whole group",
+          "grid": {
+            "x": 0,
+            "y": 3,
+            "w": 12,
+            "h": 4
+          },
+          "options": {
+            "mark": "bar"
+          },
+          "binding": {
+            "source": "query",
+            "sql": "SELECT name, count FROM p_tsjvtcm0s7gv2x_counter ORDER BY count DESC"
+          }
+        }
+      ]
+    }
+  ]
 }

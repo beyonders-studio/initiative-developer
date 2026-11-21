@@ -1,6 +1,6 @@
 {
   "name": "initiative-counters",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Counters as a tool plug-in: groups of named numbers a community steps, bounds and resets, declared for Initiative to build.",
   "license": "MIT",
@@ -23,6 +23,6 @@
     "vitest": "^5.0.1"
   },
   "dependencies": {
-    "initiative-plugin-sdk": "11.1.0"
+    "initiative-plugin-sdk": "github:beyonders-studio/initiative-plugin-sdk#8aa96011f151a13b3ac6277e2eed0098211bee66"
   }
 }
