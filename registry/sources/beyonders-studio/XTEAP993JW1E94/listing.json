@@ -30,10 +30,10 @@
   ],
   "versions": [
     {
-      "version": "8.0.0",
-      "definition": "8.0.0/manifest.json",
+      "version": "9.0.0",
+      "definition": "9.0.0/manifest.json",
       "min_app_version": "0.75.0",
-      "release_notes": "Every role in an initiative starts with GitHub's use there, and a community takes it off a role in that role's settings. Built on initiative-plugin-sdk 10.1. Needs an Initiative serving plug-in API 10.1; an older one refuses to install it."
+      "release_notes": "An operator's GitHub App values are checked with GitHub when saved, and an organization's owner can connect it again: the GitHub App now asks for Members read, which each organization owner accepts in GitHub. Built on initiative-plugin-sdk 11.1. Needs an Initiative serving plug-in API 11.0 (Initiative 0.80.0); an older one refuses to install it."
     }
   ],
   "registration": {
