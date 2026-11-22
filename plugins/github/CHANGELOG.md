@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [9.0.0]
+
+Built for Initiative 0.80.0. The listing pictures a member's own GitHub
+widgets and a task's linked pull requests and branch, and an operator's
+GitHub App values are checked with GitHub when saved.
 
 ### Added
 

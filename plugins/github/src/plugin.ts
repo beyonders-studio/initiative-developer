@@ -670,11 +670,11 @@ export default definePlugin({
         alt: "A task with its GitHub section: two linked pull requests, one open and one merged, each approved and passing its checks, and the task's branch.",
       },
     ],
-    version: "8.0.0",
+    version: "9.0.0",
     // The oldest Initiative that runs a plug-in's calls to GitHub itself, and an
     // after_connect in steps; an older one refuses this manifest.
     minAppVersion: "0.75.0",
     releaseNotes:
-      "Every role in an initiative starts with GitHub's use there, and a community takes it off a role in that role's settings. Built on initiative-plugin-sdk 10.1. Needs an Initiative serving plug-in API 10.1; an older one refuses to install it.",
+      "An operator's GitHub App values are checked with GitHub when saved, and an organization's owner can connect it again: the GitHub App now asks for Members read, which each organization owner accepts in GitHub. Built on initiative-plugin-sdk 11.1. Needs an Initiative serving plug-in API 11.0 (Initiative 0.80.0); an older one refuses to install it.",
   },
 });
