@@ -295,12 +295,12 @@
           "pattern": "^[a-z0-9][a-z0-9._/:-]*@sha256:[0-9a-f]{64}$"
         },
         "scope_ceiling": {
-          "description": "The scopes review cleared, and 'plugins:<public_id>' for each plug-in it may call. A manifest may ask for less, never more.",
+          "description": "The scopes review cleared: Initiative's own ('projects:write'), a tool plug-in's tool's ('<key>.<uid>:read' or ':write', its kind, as Initiative names it: the tool's key, '.', the plug-in's uid in lower case), and 'plugins:<public_id>' for each plug-in it may call. A manifest may ask for less, never more.",
           "type": "array",
           "uniqueItems": true,
           "items": {
             "type": "string",
-            "pattern": "^([a-z][a-z_]*:[a-z][a-z_]*|plugins:[a-z0-9_-]+\\.[a-z0-9._-]+)$"
+            "pattern": "^([a-z][a-z_]*:[a-z][a-z_]*|[a-z][a-z0-9_]{0,16}\\.[a-z0-9]{14}:(read|write)|plugins:[a-z0-9_-]+\\.[a-z0-9._-]+)$"
           }
         },
         "compose": {

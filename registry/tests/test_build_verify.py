@@ -381,6 +381,34 @@ def test_a_ceiling_may_name_another_plugin(
             world.build()
 
 
+@pytest.mark.parametrize(
+    ("scope", "accepted"),
+    [
+        ("counter_group.tsjvtcm0s7gv2x:read", True),
+        ("counter_group.tsjvtcm0s7gv2x:write", True),
+        ("counter_group.tsjvtcm0s7gv2x:admin", False),
+        ("counter_group.TSJVTCM0S7GV2X:read", False),
+        ("counter_group.tsjvtcm0s7gv2:read", False),
+        ("a_key_far_too_long_x.tsjvtcm0s7gv2x:read", False),
+    ],
+)
+def test_a_ceiling_may_name_a_tool_plugin_s_tool(
+    world: World, scope: str, accepted: bool
+) -> None:
+    """Initiative grants a tool plug-in's tool as ``<kind>:read`` and
+    ``<kind>:write``, its kind the tool's key, '.', and the plug-in's uid in
+    lower case. A listing that asked for one was refused here until
+    Automations 0.22.0 did."""
+    world.edit_listing(
+        PLUGIN, lambda d: d["registration"]["scope_ceiling"].append(scope)
+    )
+    if accepted:
+        world.build()
+    else:
+        with pytest.raises(RegistryError, match=r"listing\.schema\.json"):
+            world.build()
+
+
 COMPOSE = {
     "service": "tracker:\n  image: ${IMAGE}\n  environment:\n"
     "    INITIATIVE_URL: ${INITIATIVE_URL}\n    PRICE: $$5\n",
