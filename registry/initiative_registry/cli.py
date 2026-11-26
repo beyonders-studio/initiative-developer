@@ -13,6 +13,7 @@ from . import layout
 from .build import BUILD_TARGETS, build, refresh_timestamp
 from .bundle import DEFAULT_BUNDLE_DAYS, MAX_BUNDLE_DAYS, export_bundle
 from .errors import RegistryError
+from .issued import check_issued, load_ledger
 from .keys import (
     PASSPHRASE_ENV,
     generate,
@@ -21,6 +22,7 @@ from .keys import (
     signer_from_path,
 )
 from .offline import init_root, sign_offline
+from .sources import load_listings, load_publishers
 from .verify import verify
 
 
@@ -109,6 +111,14 @@ def _online_signer(name: str, *, explicit: Path | None, key_dir: Path | None):
         else layout.publisher_key_env(name)
     )
     return resolve_signer(name, explicit=explicit, key_dir=key_dir, env_var=env)
+
+
+def _check_issued(args: argparse.Namespace) -> None:
+    ledger = load_ledger(args.ledger)
+    publishers = load_publishers(args.publishers or [layout.DEFAULT_PUBLISHERS_DIR])
+    listings = load_listings(args.sources, publishers)
+    check_issued(listings, ledger)
+    print(f"{len(listings)} listings, each under the uid issued to it")
 
 
 def _build(args: argparse.Namespace) -> None:
@@ -338,6 +348,28 @@ def parser() -> argparse.ArgumentParser:
         "--publisher-key", action="append", default=[], metavar="PREFIX=PATH"
     )
     run.set_defaults(run=_build)
+
+    issued = commands.add_parser(
+        "check-issued",
+        help="hold every listing to the uid initiative-packages issued it",
+    )
+    issued.add_argument(
+        "--sources",
+        type=_path,
+        action="append",
+        required=True,
+        help="a source tree; repeat to add more",
+    )
+    issued.add_argument(
+        "--publishers", type=_path, action="append", help=publishers_help
+    )
+    issued.add_argument(
+        "--ledger",
+        type=_path,
+        required=True,
+        help="initiative-packages' listings.json",
+    )
+    issued.set_defaults(run=_check_issued)
 
     refresh = commands.add_parser(
         "refresh-timestamp", help="re-sign timestamp over the built repository"

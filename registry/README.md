@@ -53,7 +53,14 @@ and [`schema/listing.schema.json`](schema/listing.schema.json) states most of
 them:
 
 - **`uid`** is 14 characters of Crockford base32 without `I`, `L`, `O` or `U`.
-  It is also the directory's name, and it is never reused.
+  It is also the directory's name, and it is never reused. A listing does not
+  choose it: initiative-packages issues every uid, public and private alike,
+  and holds it in its ledger (`initiative-packages issue-id --public-id
+  <public_id> --home public`; its README, "The listing ledger"). The pull
+  request check and every publish read that ledger and refuse a listing
+  under any uid not issued to it as `public`
+  ([`initiative_registry/issued.py`](initiative_registry/issued.py)). Ask a
+  maintainer for one before opening the pull request.
 - **`publisher`** names a record in `publishers/` and the directory above the
   listing. **`public_id`** is `<publisher>.<slug>`. The `core` prefix is
   reserved and never accepted.
